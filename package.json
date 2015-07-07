@@ -1,0 +1,14 @@
+{
+  "name": "ms_elm",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.html",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "vinyl-fs": "^1.0.0"
+  }
+}
