@@ -20,8 +20,11 @@ type alias Model = {
         tiles : Map
     }
 
-height = 1
-width = 1
+height = 15
+width = 15
+
+tileWidth = 15
+tileHeight = 15
 
 cond : Bool -> a -> a -> a
 cond b t f = if b then t else f
@@ -75,10 +78,18 @@ state : Signal Model
 state = foldp update init updates.signal
 
 toPx : a -> String
-toPx = toString >> ((++) "px")
+toPx = toString >> ((flip (++)) "px")
 
 renderTile : Point -> Contents -> Svg
-renderTile (pX,pY) contents = rect [pX|>toPx|>Attr.x, pY|>toPx|>Attr.y, Attr.width "15px", Attr.height "15px"]
+renderTile (pX,pY) contents = rect [
+        (pX*tileWidth)|>toPx|>Attr.x, 
+        (pY*tileHeight)|>toPx|>Attr.y, 
+        tileWidth|>toPx|>Attr.width, 
+        tileHeight|>toPx|>Attr.height,
+        Attr.fill (case contents of
+            Bomb -> "white"
+            _ -> "black")
+    ]
     (case contents of
         Bomb -> [text "bomb"]
         Neighbors n -> [n|>toString|>text]
@@ -88,7 +99,11 @@ concatMap : Point -> Svg -> List Svg -> List Svg
 concatMap _ v l = v :: l
 
 render : Model -> Html
-render model = Dict.map renderTile model.tiles |> foldl concatMap [] |> svg []
+render model = Dict.map renderTile model.tiles 
+    |> foldl concatMap [] 
+    |> svg [
+            (tileWidth*width)|>toPx|>Attr.width, (tileHeight*height)|>toPx|>Attr.height
+        ]
 
 main : Signal Html
 main = render <~ state
