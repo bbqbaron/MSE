@@ -13,7 +13,8 @@ import Svg.Attributes as Attr
 type Action = Idle
 type Contents = Bomb|Neighbors Int|Nothing
 
-type alias Map = Dict Point Contents
+type alias Tile = {contents : Contents, clicked : Bool}
+type alias Map = Dict Point Tile
 type alias Point = (Int,Int)
 
 type alias Model = {
@@ -29,13 +30,13 @@ tileHeight = 15
 cond : Bool -> a -> a -> a
 cond b t f = if b then t else f
 
-makeTile : Float -> Contents
-makeTile roll = cond (roll <= 0.10) Bomb Nothing
+makeTile : Float -> Tile
+makeTile roll = {contents = cond (roll <= 0.10) Bomb Nothing, clicked = False}
 
 listGenerator : Generator (List Float)
 listGenerator = list (height*width) probability
 
-tiles : List Contents
+tiles : List Tile
 tiles = 
     let (list, _) = generate listGenerator (initialSeed 0)
     in List.map makeTile list
@@ -43,8 +44,8 @@ tiles =
 range : Int -> List Int
 range n = [0..n-1]
 
-addTile : (Contents, Point) -> Map -> Map
-addTile (contents, point) map = insert point contents map
+addTile : (Tile, Point) -> Map -> Map
+addTile (tile, point) map = insert point tile map
 
 combine : (a -> b -> c) -> List a -> List b -> List c
 combine f l1 l2 = List.map f l1 |> List.map (flip List.map l2) |> concat
@@ -80,15 +81,13 @@ state = foldp update init updates.signal
 toPx : a -> String
 toPx = toString >> ((flip (++)) "px")
 
-renderTile : Point -> Contents -> Svg
-renderTile (pX,pY) contents = rect [
+renderTile : Point -> Tile -> Svg
+renderTile (pX,pY) {contents} = rect [
         (pX*tileWidth)|>toPx|>Attr.x, 
         (pY*tileHeight)|>toPx|>Attr.y, 
         tileWidth|>toPx|>Attr.width, 
         tileHeight|>toPx|>Attr.height,
-        Attr.fill (case contents of
-            Bomb -> "white"
-            _ -> "black")
+        Attr.fill "black"
     ]
     (case contents of
         Bomb -> [text "bomb"]
