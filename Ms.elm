@@ -4,22 +4,25 @@ import Debug exposing (log)
 import Dict exposing (Dict, empty, foldl, insert)
 import Html exposing (Html, text)
 import Html.Attributes
+import Html.Events exposing(on)
 import List exposing (concat)
 import Maybe exposing (Maybe(..), withDefault)
 import Random exposing (generate, Generator, initialSeed, list, Seed)
 import Random.Float exposing (probability)
 import Signal exposing ((<~), Address, foldp, Mailbox, mailbox, message, Signal)
 
+import Html.Decoder exposing (mouseEvent)
 import Svg exposing (rect, Svg, svg)
 import Svg.Attributes as Attr
 import Svg.Events as Ev
 
-type Action = Idle|Click (Int,Int)
+type alias Point = (Int,Int)
+
+type Action = Idle|Click Point|Mark Point
 type Contents = Bomb|Neighbors Int|Empty
 
-type alias Tile = {contents : Contents, clicked : Bool}
+type alias Tile = {contents : Contents, clicked : Bool, marked : Bool}
 type alias Map = Dict Point Tile
-type alias Point = (Int,Int)
 
 dirs : List Point
 dirs = [(-1,0), (0,-1), (1,0), (0,1)]
@@ -92,7 +95,7 @@ cond : Bool -> a -> a -> a
 cond b t f = if b then t else f
 
 makeTile : Float -> Tile
-makeTile roll = {contents = cond (roll <= 0.10) Bomb Empty, clicked = False}
+makeTile roll = {contents = cond (roll <= 0.10) Bomb Empty, clicked = False, marked = False}
 
 listGenerator : Generator (List Float)
 listGenerator = list (height*width) probability
@@ -124,6 +127,11 @@ init = {
 setClicked : Maybe Tile -> Maybe Tile
 setClicked mTile = case mTile of
     Just someTile -> Just {someTile|clicked<-True}
+    _ -> Nothing
+
+setMarked : Maybe Tile -> Maybe Tile
+setMarked mTile = case mTile of
+    Just someTile -> Just {someTile|marked<-True}
     _ -> Nothing
 
 force : (a->b) -> Maybe a -> b
@@ -195,6 +203,7 @@ update action model = case action of
             tileIsBomb = force isBomb tile
             model' = {model|tiles<-tiles'}
         in model' |> cond tileIsBomb lose id
+    Mark p -> {model|tiles<-Dict.update p setMarked model.tiles}
     _ -> model
 
 updates : Mailbox Action
@@ -208,7 +217,8 @@ toPx = toString >> ((flip (++)) "px")
 
 renderTile : Address Action -> Model -> Point -> Tile -> Svg
 renderTile channel model (pX,pY) tile = 
-    let baseColor = cond (not (tile.clicked||model.dead)) "black"
+    let visible = tile.clicked || model.dead
+        baseColor = cond (not visible) (cond tile.marked "yellow" "black")
         -- curried ifs! as delicious as other curried things
         color = baseColor (cond (isBomb tile) "red" "white")
         baseAttrs = [
@@ -220,9 +230,12 @@ renderTile channel model (pX,pY) tile =
         baseRect = rect (baseAttrs++[
             Attr.fill color
         ]) []
-    in Svg.g (baseAttrs++[Ev.onClick (message channel (Click (pX,pY)))]) ([baseRect] ++ case tile.contents of
-        Bomb -> if color /= "black" then [Svg.text (baseAttrs++[Attr.dy "1em"]) [text "B"]] else []
-        Neighbors n -> if color /= "black" then [Svg.text (baseAttrs++[Attr.dy "1em"]) [n|>toString|>text]] else []
+    in Svg.g (baseAttrs++[
+                    Ev.onClick (message channel (Click (pX,pY))), Html.Events.on "contextmenu" mouseEvent (\_-> message channel (Mark (pX,pY)))
+                ]
+            ) ([baseRect] ++ case tile.contents of
+        Bomb -> if visible then [Svg.text (baseAttrs++[Attr.dy "1em"]) [text "B"]] else []
+        Neighbors n -> if visible then [Svg.text (baseAttrs++[Attr.dy "1em"]) [n|>toString|>text]] else []
         Empty -> [])
 
 concatMap : Point -> Svg -> List Svg -> List Svg
