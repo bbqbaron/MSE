@@ -3,6 +3,7 @@ module Ms where
 import Debug exposing (log)
 import Dict exposing (Dict, empty, foldl, insert)
 import Html exposing (Html, text)
+import Html.Attributes
 import List exposing (concat)
 import Maybe exposing (Maybe(..), withDefault)
 import Random exposing (generate, Generator, initialSeed, list, Seed)
@@ -45,22 +46,24 @@ condM j n m = case m of
 condR : a -> a -> Bool -> a
 condR t f b = if b then t else f
 
-neighbors : Point -> Map -> List (Point, Contents)
-neighbors p map =
+neighbors : List (Int,Int)
+neighbors =
     -- list of coord tuples
     combine (,) [-1..1] [-1..1]
     -- remove 0,0
     |> List.filter (\(x',y')->not (x'==0 && y'==0))
-    |> List.map (\p->(p, Dict.get p map |> force (.contents)))
+
+neighborsOf : Point -> List Point
+neighborsOf (pX,pY) = neighbors |> List.map (\(x,y) -> (pX+x, pY+y))
+
+neighborMap : Point -> Map -> List (Point, Contents)
+neighborMap p map = neighbors |> List.map (\p->(p, Dict.get p map |> force (.contents)))
 
 count : Point -> Map -> Int
 count (x,y) map = 
-    -- list of coord tuples
-    combine (,) [-1..1] [-1..1]
-    -- remove 0,0
-    |> List.filter (\(x',y')->not (x==0&&y==0))
+    neighborsOf (x,y)
     -- reduce with addition if bomb
-    |> List.foldl (\(x',y') -> Dict.get (x+x', y+y') map |> condM isBomb False |> ((condR 1 0) >> (+)))
+    |> List.foldl (\(x,y) -> Dict.get (x,y) map |> condM isBomb False |> ((condR 1 0) >> (+)))
     0
 
 addCount : Int -> Tile -> Tile
@@ -170,12 +173,11 @@ renderTile channel model (pX,pY) tile =
                 tileHeight|>toPx|>Attr.height
             ]
         baseRect = rect (baseAttrs++[
-            Attr.fill color,
-            Ev.onClick (message channel (Click (pX,pY)))
+            Attr.fill color
         ]) []
-    in Svg.g baseAttrs ([baseRect] ++ case tile.contents of
-        Bomb -> [Svg.text (baseAttrs++[Attr.dy "1em"]) [text "B"]]
-        Neighbors n -> [Svg.text (baseAttrs++[Attr.dy "1em"]) [n|>toString|>text]]
+    in Svg.g (baseAttrs++[Ev.onClick (message channel (Click (pX,pY)))]) ([baseRect] ++ case tile.contents of
+        Bomb -> if color /= "black" then [Svg.text (baseAttrs++[Attr.dy "1em"]) [text "B"]] else []
+        Neighbors n -> if color /= "black" then [Svg.text (baseAttrs++[Attr.dy "1em"]) [n|>toString|>text]] else []
         Empty -> [])
 
 concatMap : Point -> Svg -> List Svg -> List Svg
@@ -185,7 +187,7 @@ render : Address Action -> Model -> Html
 render channel model = Dict.map (renderTile channel model) model.tiles 
     |> foldl concatMap [] 
     |> svg [
-            (tileWidth*width)|>toPx|>Attr.width, (tileHeight*height)|>toPx|>Attr.height
+            (tileWidth*width)|>toPx|>Attr.width, (tileHeight*height)|>toPx|>Attr.height, Html.Attributes.style [("user-select", "none")]
         ]
 
 main : Signal Html
