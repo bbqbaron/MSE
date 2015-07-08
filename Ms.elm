@@ -20,6 +20,7 @@ type alias Point = (Int,Int)
 
 type Action = Idle|Click Point|Mark Point
 type Contents = Bomb|Neighbors Int|Empty
+type GameState = InGame|Dead|Victorious
 
 type alias Tile = {contents : Contents, clicked : Bool, marked : Bool}
 type alias Map = Dict Point Tile
@@ -31,7 +32,7 @@ move : Point -> Point -> Point
 move (x1,y1) (x2,y2) = (x1+x2,y1+y2)
 
 type alias Model = {
-        dead : Bool,
+        state : GameState,
         tiles : Map
     }
 
@@ -59,8 +60,8 @@ neighbors : List (Int,Int)
 neighbors =
     -- list of coord tuples
     combine (,) [-1..1] [-1..1]
-    -- remove 0,0
-    |> List.filter (\(x',y')->not (x'==0 && y'==0))
+    -- remove 0,0 and any variation not containing 0
+    |> List.filter (\(x',y')->not (x'==0 && y'==0) && not (x'/=0 && y'/=0))
 
 neighborsOf : Point -> List Point
 neighborsOf (pX,pY) = neighbors |> List.map (\(x,y) -> (pX+x, pY+y))
@@ -72,8 +73,7 @@ count : Point -> Map -> Int
 count (x,y) map = 
     neighborsOf (x,y)
     -- reduce with addition if bomb
-    |> List.foldl (\(x,y) -> Dict.get (x,y) map |> condM isBomb False |> ((condR 1 0) >> (+)))
-    0
+    |> List.foldl (\(x,y) -> Dict.get (x,y) map |> condM isBomb False |> ((condR 1 0) >> (+))) 0
 
 addCount : Int -> Tile -> Tile
 addCount n tile = 
@@ -120,7 +120,7 @@ makeMap = (width, height)
 
 init : Model
 init = {
-        dead = False,
+        state = InGame,
         tiles = makeMap |> addCounts
     }
 
@@ -139,7 +139,7 @@ force fn v = case v of
     Just a -> fn a
 
 lose : Model -> Model
-lose model = {model|dead<-True}
+lose model = {model|state<-Dead}
 
 isSomething : Contents -> Tile -> Bool
 isSomething what tile = tile.contents == what
@@ -195,16 +195,22 @@ walkOpen : Point -> Map -> Map
 walkOpen p map = openTile map p
 
 update : Action -> Model -> Model
-update action model = case action of
-    Click p -> 
-        let tiles' = walkOpen p model.tiles
-            tile = Dict.get p tiles'
-            tileIsEmpty = force isEmpty tile
-            tileIsBomb = force isBomb tile
-            model' = {model|tiles<-tiles'}
-        in model' |> cond tileIsBomb lose id
-    Mark p -> {model|tiles<-Dict.update p setMarked model.tiles}
-    _ -> model
+update action model =
+    let tiles = model.tiles
+        notMines = List.filter (isBomb>>not) (Dict.values tiles)
+        stillClosed = List.filter ((.clicked)>>not) notMines |> List.length
+    in case stillClosed of
+        0 -> {model|state<-Victorious}
+        _ -> case action of
+                Click p -> 
+                    let tiles' = walkOpen p tiles
+                        tile = Dict.get p tiles'
+                        tileIsEmpty = force isEmpty tile
+                        tileIsBomb = force isBomb tile
+                        model' = {model|tiles<-tiles'}
+                    in model' |> cond tileIsBomb lose id
+                Mark p -> {model|tiles<-Dict.update p setMarked tiles}
+                _ -> model
 
 updates : Mailbox Action
 updates = mailbox Idle
@@ -217,7 +223,7 @@ toPx = toString >> ((flip (++)) "px")
 
 renderTile : Address Action -> Model -> Point -> Tile -> Svg
 renderTile channel model (pX,pY) tile = 
-    let visible = tile.clicked || model.dead
+    let visible = tile.clicked || (model.state == Dead)
         baseColor = cond (not visible) (cond tile.marked "yellow" "black")
         -- curried ifs! as delicious as other curried things
         color = baseColor (cond (isBomb tile) "red" "white")
@@ -242,11 +248,15 @@ concatMap : Point -> Svg -> List Svg -> List Svg
 concatMap _ v l = v :: l
 
 render : Address Action -> Model -> Html
-render channel model = Dict.map (renderTile channel model) model.tiles 
-    |> foldl concatMap [] 
-    |> svg [
-            (tileWidth*width)|>toPx|>Attr.width, (tileHeight*height)|>toPx|>Attr.height, Html.Attributes.style [("user-select", "none")]
-        ]
+render channel model = 
+    if model.state == Victorious then 
+        Html.text "NOICE"
+    else    
+        Dict.map (renderTile channel model) model.tiles 
+        |> foldl concatMap [] 
+        |> svg [
+                (tileWidth*width)|>toPx|>Attr.width, (tileHeight*height)|>toPx|>Attr.height, Html.Attributes.style [("user-select", "none")]
+            ]
 
 main : Signal Html
 main = render updates.address <~ state
