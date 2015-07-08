@@ -21,6 +21,12 @@ type alias Tile = {contents : Contents, clicked : Bool}
 type alias Map = Dict Point Tile
 type alias Point = (Int,Int)
 
+dirs : List Point
+dirs = [(-1,0), (0,-1), (1,0), (0,1)]
+
+move : Point -> Point -> Point
+move (x1,y1) (x2,y2) = (x1+x2,y1+y2)
+
 type alias Model = {
         dead : Bool,
         tiles : Map
@@ -69,7 +75,7 @@ count (x,y) map =
 addCount : Int -> Tile -> Tile
 addCount n tile = 
     if tile.contents /= Bomb then 
-        {tile|contents<-Neighbors n}
+        {tile|contents<-if n > 0 then Neighbors n else Empty}
     else
         tile
 
@@ -136,20 +142,59 @@ isBomb = isSomething Bomb
 isEmpty : Tile -> Bool
 isEmpty = isSomething Empty
 
-walkOpen : Point -> Model -> Model
--- TODO recursively find and open all empty neighbors
-walkOpen p m = m
+type alias Walker = (Map, List Point) -- a map and a list of undone points
+
+isNothing : Maybe a -> Bool
+isNothing a = case a of
+    Nothing -> True
+    _ -> False
+
+isJust : Maybe a -> Bool
+isJust = isNothing >> not
+
+peekAndOpen : Walker -> Walker
+peekAndOpen (map, points) =
+    case List.head points of
+        Just p ->
+            let mTile = Dict.get p map
+                -- do we open the tile? do we keep going?
+                (openIt, continue) = case mTile of
+                    Just {contents, clicked} -> (
+                            contents /= Bomb && not clicked,
+                            contents == Empty && not clicked
+                        )
+                    _ -> (False, False) 
+                -- update the map
+                map' = if openIt then Dict.update p setClicked map else map
+                -- update the list of points
+                points' = 
+                    (withDefault [] (List.tail points)) 
+                    ++ (if continue then List.map (move p) dirs else [])
+            in peekAndOpen (map', points')
+        _ -> (map, points)
+
+chain : List (a->a) -> a -> a
+chain fns a = case List.head fns of
+    Just fn -> fn a |> chain (withDefault [] (List.tail fns))
+    _ -> a
+
+openTile : Map -> Point -> Map
+openTile map p =
+    let (map', _) = peekAndOpen (map, [p])
+    in map'
+
+walkOpen : Point -> Map -> Map
+walkOpen p map = openTile map p
 
 update : Action -> Model -> Model
 update action model = case action of
     Click p -> 
-        -- nonexhaustive; cowboy coding
-        let tiles' = Dict.update p setClicked model.tiles
+        let tiles' = walkOpen p model.tiles
             tile = Dict.get p tiles'
-            empty = force isEmpty tile
-            boom = force isBomb tile
+            tileIsEmpty = force isEmpty tile
+            tileIsBomb = force isBomb tile
             model' = {model|tiles<-tiles'}
-        in model' |> cond boom lose id |> cond empty (walkOpen p) id 
+        in model' |> cond tileIsBomb lose id
     _ -> model
 
 updates : Mailbox Action
@@ -191,4 +236,4 @@ render channel model = Dict.map (renderTile channel model) model.tiles
         ]
 
 main : Signal Html
-main = (render updates.address) <~ state
+main = render updates.address <~ state
