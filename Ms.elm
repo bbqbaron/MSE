@@ -10,7 +10,7 @@ import Maybe exposing (Maybe(..), withDefault)
 import Random exposing (generate, Generator, initialSeed, list, Seed)
 import Random.Float exposing (probability)
 import Signal exposing ((<~), (~), Address, foldp, Mailbox, mailbox, message, Signal)
-import Time exposing (Time, second)
+import Time exposing (Time)
 
 import Html.Decoder exposing (mouseEvent)
 import Svg exposing (rect, Svg, svg)
@@ -25,17 +25,14 @@ type GameState = InGame|Dead|Victorious
 
 type alias Tile = {contents : Contents, clicked : Bool, marked : Bool}
 type alias Map = Dict Point Tile
-
-move : Point -> Point -> Point
-move (x1,y1) (x2,y2) = (x1+x2,y1+y2)
-
 type alias Model = {
         state : GameState,
         tiles : Map
     }
+type alias Walker = (Map, List Point) -- a map and a list of undone points
 
-id : a -> a
-id x = x
+move : Point -> Point -> Point
+move (x1,y1) (x2,y2) = (x1+x2,y1+y2)
 
 combine : (a -> b -> c) -> List a -> List b -> List c
 combine f l1 l2 = List.map f l1 |> List.map (flip List.map l2) |> concat
@@ -148,8 +145,6 @@ isBomb = isSomething Bomb
 isEmpty : Tile -> Bool
 isEmpty = isSomething Empty
 
-type alias Walker = (Map, List Point) -- a map and a list of undone points
-
 isNothing : Maybe a -> Bool
 isNothing a = case a of
     Nothing -> True
@@ -192,23 +187,36 @@ openTile map p =
 walkOpen : Point -> Map -> Map
 walkOpen p map = openTile map p
 
+mash : Point -> Map -> Map
+mash p map = List.foldl (\dir map'->
+    let dest = move p dir
+    in case Dict.get dest map' of
+        Just tile -> if tile.marked then map' else Dict.update dest setClicked map'
+        _ -> map') map neighbors
+
 update : Action -> Model -> Model
 update action model =
     let tiles = model.tiles
         tiles' = case action of
             Click p -> walkOpen p tiles
-            Mark p -> Dict.update p setMarked tiles
+            Mark p ->
+                case Dict.get p tiles of
+                    Just tile -> if tile.clicked then mash p tiles else Dict.update p setMarked tiles
+                    -- should never fail. BOOM.
             _ -> tiles
-        closedNotBomb = List.filter (\t->t.contents /= Bomb && not t.clicked) (Dict.values tiles') |> log "closedNotBomb" |> List.length
+        tileList = Dict.values tiles'
+        closedNotBomb = List.filter (\t->t.contents /= Bomb && not t.clicked) tileList |> List.length
+        bombNotClosed = List.filter (\t->t.contents == Bomb && t.clicked) tileList |> List.length
     in case closedNotBomb of
         0 -> {model|state<-Victorious}
-        _ -> case action of
+        _ -> if bombNotClosed > 0 then lose model else
+            case action of
                 Click p -> 
                     let tile = Dict.get p tiles'
                         tileIsEmpty = force isEmpty tile
                         tileIsBomb = force isBomb tile
                         model' = {model|tiles<-tiles'}
-                    in model' |> cond tileIsBomb lose id
+                    in model' |> cond tileIsBomb lose identity
                 Mark p -> {model|tiles<-tiles'}
                 _ -> model
 
@@ -218,8 +226,8 @@ updates = mailbox Idle
 state : Signal Model
 state = foldp update init updates.signal
 
-timer : Signal Time
-timer = Time.every second
+timer : Signal Int
+timer = foldp (\dt ct -> ct + (dt//1000)) 0 (round <~ (Time.fps 1))
 
 toPx : a -> String
 toPx = toString >> ((flip (++)) "px")
@@ -250,7 +258,7 @@ renderTile channel model (pX,pY) tile =
 concatMap : Point -> Svg -> List Svg -> List Svg
 concatMap _ v l = v :: l
 
-renderTimer : Time -> Html
+renderTimer : Int -> Html
 renderTimer time = time |> toString |> Html.text
 
 renderField : Address Action -> Model -> Html
@@ -264,7 +272,7 @@ renderField channel model =
                 (tileWidth*width)|>toPx|>Attr.width, (tileHeight*height)|>toPx|>Attr.height, Html.Attributes.style [("user-select", "none")]
             ]
 
-render : Address Action -> Model -> Time -> Html
+render : Address Action -> Model -> Int -> Html
 render channel model time = Html.div [] [
         renderTimer time,
         renderField channel model
