@@ -9,7 +9,8 @@ import List exposing (concat)
 import Maybe exposing (Maybe(..), withDefault)
 import Random exposing (generate, Generator, initialSeed, list, Seed)
 import Random.Float exposing (probability)
-import Signal exposing ((<~), Address, foldp, Mailbox, mailbox, message, Signal)
+import Signal exposing ((<~), (~), Address, foldp, Mailbox, mailbox, message, Signal)
+import Time exposing (Time, second)
 
 import Html.Decoder exposing (mouseEvent)
 import Svg exposing (rect, Svg, svg)
@@ -215,6 +216,9 @@ updates = mailbox Idle
 state : Signal Model
 state = foldp update init updates.signal
 
+timer : Signal Time
+timer = Time.every second
+
 toPx : a -> String
 toPx = toString >> ((flip (++)) "px")
 
@@ -244,8 +248,11 @@ renderTile channel model (pX,pY) tile =
 concatMap : Point -> Svg -> List Svg -> List Svg
 concatMap _ v l = v :: l
 
-render : Address Action -> Model -> Html
-render channel model = 
+renderTimer : Time -> Html
+renderTimer time = time |> toString |> Html.text
+
+renderField : Address Action -> Model -> Html
+renderField channel model = 
     if model.state == Victorious then 
         Html.text "NOICE"
     else    
@@ -255,5 +262,11 @@ render channel model =
                 (tileWidth*width)|>toPx|>Attr.width, (tileHeight*height)|>toPx|>Attr.height, Html.Attributes.style [("user-select", "none")]
             ]
 
+render : Address Action -> Model -> Time -> Html
+render channel model time = Html.div [] [
+        renderTimer time,
+        renderField channel model
+    ]
+
 main : Signal Html
-main = render updates.address <~ state
+main = render updates.address <~ state ~ timer
