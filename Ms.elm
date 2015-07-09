@@ -133,9 +133,6 @@ force : (a->b) -> Maybe a -> b
 force fn v = case v of
     Just a -> fn a
 
-lose : Model -> Model
-lose model = {model|state<-Dead}
-
 isSomething : Contents -> Tile -> Bool
 isSomething what tile = tile.contents == what
 
@@ -179,13 +176,8 @@ chain fns a = case List.head fns of
     Just fn -> fn a |> chain (withDefault [] (List.tail fns))
     _ -> a
 
-openTile : Map -> Point -> Map
-openTile map p =
-    let (map', _) = peekAndOpen (map, [p])
-    in map'
-
 walkOpen : Point -> Map -> Map
-walkOpen p map = openTile map p
+walkOpen p map = peekAndOpen (map, [p]) |> fst
 
 mash : Point -> Map -> Map
 mash p map = List.foldl (\dir map'->
@@ -194,31 +186,34 @@ mash p map = List.foldl (\dir map'->
         Just tile -> if tile.marked then map' else Dict.update dest setClicked map'
         _ -> map') map neighbors
 
+-- TODO dedupe next two functions
+checkForExplosions : Model -> Model
+checkForExplosions model = 
+    let bombNotClosed = List.filter (\t->t.contents == Bomb && t.clicked) (Dict.values model.tiles) |> List.length
+    in if bombNotClosed > 0 then {model|state<-Dead} else model
+
+checkForVictory : Model -> Model
+checkForVictory model = 
+    let closedNotBomb = List.filter (\t->t.contents /= Bomb && not t.clicked) (Dict.values model.tiles) |> List.length
+    in if closedNotBomb == 0 then {model|state<-Victorious} else model
+
+click : Point -> Map -> Map
+click p map = Dict.update p setClicked map
+
 update : Action -> Model -> Model
 update action model =
-    let tiles = model.tiles
-        tiles' = case action of
-            Click p -> walkOpen p tiles
-            Mark p ->
-                case Dict.get p tiles of
-                    Just tile -> if tile.clicked then mash p tiles else Dict.update p setMarked tiles
-                    -- should never fail. BOOM.
-            _ -> tiles
-        tileList = Dict.values tiles'
-        closedNotBomb = List.filter (\t->t.contents /= Bomb && not t.clicked) tileList |> List.length
-        bombNotClosed = List.filter (\t->t.contents == Bomb && t.clicked) tileList |> List.length
-    in case closedNotBomb of
-        0 -> {model|state<-Victorious}
-        _ -> if bombNotClosed > 0 then lose model else
+    { model
+        | tiles <- 
             case action of
                 Click p -> 
-                    let tile = Dict.get p tiles'
-                        tileIsEmpty = force isEmpty tile
-                        tileIsBomb = force isBomb tile
-                        model' = {model|tiles<-tiles'}
-                    in model' |> cond tileIsBomb lose identity
-                Mark p -> {model|tiles<-tiles'}
-                _ -> model
+                    let tiles' = click p model.tiles
+                    in walkOpen p tiles'
+                Mark p -> 
+                    case Dict.get p model.tiles of
+                        Just tile -> if tile.clicked then mash p model.tiles else Dict.update p setMarked model.tiles
+                _ -> model.tiles }
+    |> checkForExplosions
+    |> checkForVictory
 
 updates : Mailbox Action
 updates = mailbox Idle
