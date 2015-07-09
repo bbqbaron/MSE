@@ -25,9 +25,6 @@ type GameState = InGame|Dead|Victorious
 type alias Tile = {contents : Contents, clicked : Bool, marked : Bool}
 type alias Map = Dict Point Tile
 
-dirs : List Point
-dirs = [(-1,0), (0,-1), (1,0), (0,1)]
-
 move : Point -> Point -> Point
 move (x1,y1) (x2,y2) = (x1+x2,y1+y2)
 
@@ -60,8 +57,8 @@ neighbors : List (Int,Int)
 neighbors =
     -- list of coord tuples
     combine (,) [-1..1] [-1..1]
-    -- remove 0,0 and any variation not containing 0
-    |> List.filter (\(x',y')->not (x'==0 && y'==0) && not (x'/=0 && y'/=0))
+    -- remove 0,0
+    |> List.filter (\(x',y')->not (x'==0 && y'==0))
 
 neighborsOf : Point -> List Point
 neighborsOf (pX,pY) = neighbors |> List.map (\(x,y) -> (pX+x, pY+y))
@@ -177,7 +174,7 @@ peekAndOpen (map, points) =
                 -- update the list of points
                 points' = 
                     (withDefault [] (List.tail points)) 
-                    ++ (if continue then List.map (move p) dirs else [])
+                    ++ (if continue then List.map (move p) neighbors else [])
             in peekAndOpen (map', points')
         _ -> (map, points)
 
