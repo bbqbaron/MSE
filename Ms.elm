@@ -93,7 +93,7 @@ cond : Bool -> a -> a -> a
 cond b t f = if b then t else f
 
 makeTile : Float -> Tile
-makeTile roll = {contents = cond (roll <= 0.10) Bomb Empty, clicked = False, marked = False}
+makeTile roll = {contents = cond (roll <= 0.15) Bomb Empty, clicked = False, marked = False}
 
 listGenerator : Generator (List Float)
 listGenerator = list (height*width) probability
@@ -195,19 +195,21 @@ walkOpen p map = openTile map p
 update : Action -> Model -> Model
 update action model =
     let tiles = model.tiles
-        notMines = List.filter (isBomb>>not) (Dict.values tiles)
-        stillClosed = List.filter ((.clicked)>>not) notMines |> List.length
-    in case stillClosed of
+        tiles' = case action of
+            Click p -> walkOpen p tiles
+            Mark p -> Dict.update p setMarked tiles
+            _ -> tiles
+        closedNotBomb = List.filter (\t->t.contents /= Bomb && not t.clicked) (Dict.values tiles') |> log "closedNotBomb" |> List.length
+    in case closedNotBomb of
         0 -> {model|state<-Victorious}
         _ -> case action of
                 Click p -> 
-                    let tiles' = walkOpen p tiles
-                        tile = Dict.get p tiles'
+                    let tile = Dict.get p tiles'
                         tileIsEmpty = force isEmpty tile
                         tileIsBomb = force isBomb tile
                         model' = {model|tiles<-tiles'}
                     in model' |> cond tileIsBomb lose id
-                Mark p -> {model|tiles<-Dict.update p setMarked tiles}
+                Mark p -> {model|tiles<-tiles'}
                 _ -> model
 
 updates : Mailbox Action
