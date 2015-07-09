@@ -126,7 +126,7 @@ setClicked mTile = case mTile of
 
 setMarked : Maybe Tile -> Maybe Tile
 setMarked mTile = case mTile of
-    Just someTile -> Just {someTile|marked<-True}
+    Just someTile -> Just {someTile|marked<-not someTile.marked}
     _ -> Nothing
 
 force : (a->b) -> Maybe a -> b
