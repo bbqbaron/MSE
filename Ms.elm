@@ -1,14 +1,12 @@
 module Ms where
 
 import Debug exposing (log)
-import Dict exposing (Dict, empty, foldl, insert)
+import Dict exposing (Dict, foldl, insert)
 import Html exposing (Html, text)
 import Html.Attributes
 import Html.Events exposing(on)
-import List exposing (concat)
-import Maybe exposing (Maybe(..), withDefault)
-import Random exposing (generate, Generator, initialSeed, list, Seed)
-import Random.Float exposing (probability)
+import List
+import Maybe exposing (Maybe(..))
 import Signal exposing ((<~), (~), Address, foldp, Mailbox, mailbox, message, Signal)
 import Time exposing (Time)
 
@@ -17,68 +15,17 @@ import Svg exposing (rect, Svg, svg)
 import Svg.Attributes as Attr
 import Svg.Events as Ev
 
-type alias Point = (Int,Int)
+import Map
+import Util exposing (..)
+import Walker exposing(peekAndOpen)
 
-type Action = Idle|Click Point|Mark Point
-type Contents = Bomb|Neighbors Int|Empty
+type Action = Idle|Click Map.Point|Mark Map.Point
 type GameState = InGame|Dead|Victorious
 
-type alias Tile = {contents : Contents, clicked : Bool, marked : Bool}
-type alias Map = Dict Point Tile
 type alias Model = {
         state : GameState,
-        tiles : Map
+        tiles : Map.Map
     }
-type alias Walker = (Map, List Point) -- a map and a list of undone points
-
-move : Point -> Point -> Point
-move (x1,y1) (x2,y2) = (x1+x2,y1+y2)
-
-combine : (a -> b -> c) -> List a -> List b -> List c
-combine f l1 l2 = List.map f l1 |> List.map (flip List.map l2) |> concat
-
-tupleMap : (a->b) -> (a,a) -> (b,b)
-tupleMap f (a,a) = (f a, f a)
-
-spread : (a -> b -> c) -> (a,b) -> c
-spread f (a,b) = f a b
-
-condM : (a->b) -> b -> Maybe a -> b
-condM j n m = case m of
-    Just something -> j something
-    Nothing -> n
-
-condR : a -> a -> Bool -> a
-condR t f b = if b then t else f
-
-neighbors : List (Int,Int)
-neighbors =
-    -- list of coord tuples
-    combine (,) [-1..1] [-1..1]
-    -- remove 0,0
-    |> List.filter (\(x',y')->not (x'==0 && y'==0))
-
-neighborsOf : Point -> List Point
-neighborsOf (pX,pY) = neighbors |> List.map (\(x,y) -> (pX+x, pY+y))
-
-neighborMap : Point -> Map -> List (Point, Contents)
-neighborMap p map = neighbors |> List.map (\p->(p, Dict.get p map |> force (.contents)))
-
-count : Point -> Map -> Int
-count (x,y) map = 
-    neighborsOf (x,y)
-    -- reduce with addition if bomb
-    |> List.foldl (\(x,y) -> Dict.get (x,y) map |> condM isBomb False |> ((condR 1 0) >> (+))) 0
-
-addCount : Int -> Tile -> Tile
-addCount n tile = 
-    if tile.contents /= Bomb then 
-        {tile|contents<-if n > 0 then Neighbors n else Empty}
-    else
-        tile
-
-addCounts : Map -> Map
-addCounts map = Dict.map (\p t -> addCount (count p map) t) map
 
 height = 15
 width = 15
@@ -86,61 +33,11 @@ width = 15
 tileWidth = 30
 tileHeight = 30
 
-cond : Bool -> a -> a -> a
-cond b t f = if b then t else f
-
-makeTile : Float -> Tile
-makeTile roll = {contents = cond (roll <= 0.15) Bomb Empty, clicked = False, marked = False}
-
-listGenerator : Generator (List Float)
-listGenerator = list (height*width) probability
-
-tiles : List Tile
-tiles = 
-    let (list, _) = generate listGenerator (initialSeed 0)
-    in List.map makeTile list
-
-range : Int -> List Int
-range n = [0..n-1]
-
-addTile : (Tile, Point) -> Map -> Map
-addTile (tile, point) map = insert point tile map
-
-makeMap : Map
-makeMap = (width, height)
-    |> tupleMap range
-    |> spread (combine (,))
-    |> List.map2 (,) tiles
-    |> List.foldl addTile empty
-
 init : Model
 init = {
         state = InGame,
-        tiles = makeMap |> addCounts
+        tiles = Map.makeMap width height |> Map.addCounts
     }
-
-setClicked : Maybe Tile -> Maybe Tile
-setClicked mTile = case mTile of
-    Just someTile -> Just {someTile|clicked<-True}
-    _ -> Nothing
-
-setMarked : Maybe Tile -> Maybe Tile
-setMarked mTile = case mTile of
-    Just someTile -> Just {someTile|marked<-not someTile.marked}
-    _ -> Nothing
-
-force : (a->b) -> Maybe a -> b
-force fn v = case v of
-    Just a -> fn a
-
-isSomething : Contents -> Tile -> Bool
-isSomething what tile = tile.contents == what
-
-isBomb : Tile -> Bool
-isBomb = isSomething Bomb
-
-isEmpty : Tile -> Bool
-isEmpty = isSomething Empty
 
 isNothing : Maybe a -> Bool
 isNothing a = case a of
@@ -150,70 +47,21 @@ isNothing a = case a of
 isJust : Maybe a -> Bool
 isJust = isNothing >> not
 
-peekAndOpen : Walker -> Walker
-peekAndOpen (map, points) =
-    case List.head points of
-        Just p ->
-            let mTile = Dict.get p map
-                -- do we open the tile? do we keep going?
-                (openIt, continue) = case mTile of
-                    Just {contents, clicked} -> (
-                            contents /= Bomb && not clicked,
-                            contents == Empty && not clicked
-                        )
-                    _ -> (False, False) 
-                -- update the map
-                map' = if openIt then Dict.update p setClicked map else map
-                -- update the list of points
-                points' = 
-                    (withDefault [] (List.tail points)) 
-                    ++ (if continue then List.map (move p) neighbors else [])
-            in peekAndOpen (map', points')
-        _ -> (map, points)
-
-chain : List (a->a) -> a -> a
-chain fns a = case List.head fns of
-    Just fn -> fn a |> chain (withDefault [] (List.tail fns))
-    _ -> a
-
-walkOpen : Point -> Map -> Map
-walkOpen p map = peekAndOpen (map, [p]) |> fst
-
-mash : Point -> Map -> Map
-mash p map = List.foldl (\dir map'->
-    let dest = move p dir
-    in case Dict.get dest map' of
-        Just tile -> if tile.marked then map' else Dict.update dest setClicked map'
-        _ -> map') map neighbors
-
--- TODO dedupe next two functions
-checkForExplosions : Model -> Model
-checkForExplosions model = 
-    let bombNotClosed = List.filter (\t->t.contents == Bomb && t.clicked) (Dict.values model.tiles) |> List.length
-    in if bombNotClosed > 0 then {model|state<-Dead} else model
-
-checkForVictory : Model -> Model
-checkForVictory model = 
-    let closedNotBomb = List.filter (\t->t.contents /= Bomb && not t.clicked) (Dict.values model.tiles) |> List.length
-    in if closedNotBomb == 0 then {model|state<-Victorious} else model
-
-click : Point -> Map -> Map
-click p map = Dict.update p setClicked map
-
 update : Action -> Model -> Model
 update action model =
     { model
         | tiles <- 
             case action of
                 Click p -> 
-                    let tiles' = click p model.tiles
-                    in walkOpen p tiles'
+                    let tiles' = Dict.update p Map.setClicked model.tiles
+                    in peekAndOpen (tiles', [p]) |> fst
                 Mark p -> 
                     case Dict.get p model.tiles of
-                        Just tile -> if tile.clicked then mash p model.tiles else Dict.update p setMarked model.tiles
+                        Just tile -> if tile.clicked then Map.mash p model.tiles else Dict.update p Map.setMarked model.tiles
                 _ -> model.tiles }
-    |> checkForExplosions
-    |> checkForVictory
+    |> (\model' -> if | Map.checkForExplosions model'.tiles -> {model'|state<-Dead}
+                      | Map.checkForVictory model'.tiles -> {model'|state<-Victorious}
+                      | otherwise -> model')
 
 updates : Mailbox Action
 updates = mailbox Idle
@@ -227,12 +75,12 @@ timer = foldp (\dt ct -> ct + (dt//1000)) 0 (round <~ (Time.fps 1))
 toPx : a -> String
 toPx = toString >> ((flip (++)) "px")
 
-renderTile : Address Action -> Model -> Point -> Tile -> Svg
+renderTile : Address Action -> Model -> Map.Point -> Map.Tile -> Svg
 renderTile channel model (pX,pY) tile = 
     let visible = tile.clicked || (model.state == Dead)
         baseColor = cond (not visible) (cond tile.marked "yellow" "black")
         -- curried ifs! as delicious as other curried things
-        color = baseColor (cond (isBomb tile) "red" "white")
+        color = baseColor (cond (Map.isBomb tile) "red" "white")
         baseAttrs = [
                 (pX*tileWidth)|>toPx|>Attr.x, 
                 (pY*tileHeight)|>toPx|>Attr.y, 
@@ -246,11 +94,11 @@ renderTile channel model (pX,pY) tile =
                     Ev.onClick (message channel (Click (pX,pY))), Html.Events.on "contextmenu" mouseEvent (\_-> message channel (Mark (pX,pY)))
                 ]
             ) ([baseRect] ++ case tile.contents of
-        Bomb -> if visible then [Svg.text (baseAttrs++[Attr.dy "1em"]) [text "B"]] else []
-        Neighbors n -> if visible then [Svg.text (baseAttrs++[Attr.dy "1em"]) [n|>toString|>text]] else []
-        Empty -> [])
+        Map.Bomb -> if visible then [Svg.text (baseAttrs++[Attr.dy "1em"]) [text "B"]] else []
+        Map.Neighbors n -> if visible then [Svg.text (baseAttrs++[Attr.dy "1em"]) [n|>toString|>text]] else []
+        Map.Empty -> [])
 
-concatMap : Point -> Svg -> List Svg -> List Svg
+concatMap : Map.Point -> Svg -> List Svg -> List Svg
 concatMap _ v l = v :: l
 
 renderTimer : Int -> Html
