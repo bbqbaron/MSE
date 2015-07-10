@@ -26,6 +26,14 @@ force : (a->b) -> Maybe a -> b
 force fn v = case v of
     Just a -> fn a
 
+isNothing : Maybe a -> Bool
+isNothing a = case a of
+    Nothing -> True
+    _ -> False
+
+isJust : Maybe a -> Bool
+isJust = isNothing >> not
+
 range : Int -> List Int
 range n = [0..n-1]
 

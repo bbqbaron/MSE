@@ -39,26 +39,17 @@ init = {
         tiles = Map.makeMap width height |> Map.addCounts
     }
 
-isNothing : Maybe a -> Bool
-isNothing a = case a of
-    Nothing -> True
-    _ -> False
-
-isJust : Maybe a -> Bool
-isJust = isNothing >> not
-
 update : Action -> Model -> Model
 update action model =
-    let model' = { model
-                    | tiles <- 
-                        case action of
-                            Click p -> 
-                                let tiles' = Dict.update p Map.setClicked model.tiles
-                                in peekAndOpen (tiles', [p]) |> fst
-                            Mark p -> 
-                                case Dict.get p model.tiles of
-                                    Just tile -> if tile.clicked then Map.mash p model.tiles else Dict.update p Map.setMarked model.tiles
-                            _ -> model.tiles }
+    let tiles' = case action of
+                    Click p -> 
+                        let tiles' = Dict.update p Map.setClicked model.tiles
+                        in peekAndOpen (tiles', [p]) |> fst
+                    Mark p -> 
+                        case Dict.get p model.tiles of
+                            Just tile -> if tile.clicked then Map.mash p model.tiles else Dict.update p Map.setMarked model.tiles
+                    _ -> model.tiles
+        model' = {model|tiles<-tiles'}
     in if | Map.checkBoom model'.tiles -> {model'|state<-Dead}
           | Map.checkRemaining model'.tiles -> {model'|state<-Victorious}
           | otherwise -> model'

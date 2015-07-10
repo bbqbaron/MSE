@@ -21,7 +21,7 @@ addCount n tile =
         tile
 
 addCounts : Map -> Map
-addCounts map = Dict.map (\p t -> addCount (count p map) t) map
+addCounts map = Dict.map (\p t -> addCount (countBombs p map) t) map
 
 addTile : (Tile, Point) -> Map -> Map
 addTile (tile, point) map = Dict.insert point tile map
@@ -35,8 +35,8 @@ checkBoom = checkFor (\t -> t.contents == Bomb && t.clicked)
 checkRemaining : Map -> Bool
 checkRemaining = checkFor (\t->t.contents /= Bomb && not t.clicked)
 
-count : Point -> Map -> Int
-count (x,y) map = 
+countBombs : Point -> Map -> Int
+countBombs (x,y) map = 
     neighborsOf (x,y)
     -- reduce with addition if bomb
     |> List.foldl (\(x,y) -> Dict.get (x,y) map |> condM isBomb False |> ((condR 1 0) >> (+))) 0
@@ -80,8 +80,8 @@ neighbors =
 neighborsOf : Point -> List Point
 neighborsOf (pX,pY) = neighbors |> List.map (\(x,y) -> (pX+x, pY+y))
 
-neighborMap : Point -> Map -> List (Point, Contents)
-neighborMap p map = neighbors |> List.map (\p->(p, Dict.get p map |> force (.contents)))
+neighborTiles : Point -> Map -> List Tile
+neighborTiles p map = neighbors |> List.map ((move p) >> ((flip Dict.get) map)) |> List.filter isJust |> List.map (force identity)
 
 setClicked : Maybe Tile -> Maybe Tile
 setClicked mTile = case mTile of
