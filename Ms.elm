@@ -49,19 +49,19 @@ isJust = isNothing >> not
 
 update : Action -> Model -> Model
 update action model =
-    { model
-        | tiles <- 
-            case action of
-                Click p -> 
-                    let tiles' = Dict.update p Map.setClicked model.tiles
-                    in peekAndOpen (tiles', [p]) |> fst
-                Mark p -> 
-                    case Dict.get p model.tiles of
-                        Just tile -> if tile.clicked then Map.mash p model.tiles else Dict.update p Map.setMarked model.tiles
-                _ -> model.tiles }
-    |> (\model' -> if | Map.checkForExplosions model'.tiles -> {model'|state<-Dead}
-                      | Map.checkForVictory model'.tiles -> {model'|state<-Victorious}
-                      | otherwise -> model')
+    let model' = { model
+                    | tiles <- 
+                        case action of
+                            Click p -> 
+                                let tiles' = Dict.update p Map.setClicked model.tiles
+                                in peekAndOpen (tiles', [p]) |> fst
+                            Mark p -> 
+                                case Dict.get p model.tiles of
+                                    Just tile -> if tile.clicked then Map.mash p model.tiles else Dict.update p Map.setMarked model.tiles
+                            _ -> model.tiles }
+    in if | Map.checkBoom model'.tiles -> {model'|state<-Dead}
+          | Map.checkRemaining model'.tiles -> {model'|state<-Victorious}
+          | otherwise -> model'
 
 updates : Mailbox Action
 updates = mailbox Idle
@@ -101,19 +101,18 @@ renderTile channel model (pX,pY) tile =
 concatMap : Map.Point -> Svg -> List Svg -> List Svg
 concatMap _ v l = v :: l
 
-renderTimer : Int -> Html
-renderTimer time = time |> toString |> Html.text
+renderTimer : a -> Html
+renderTimer = toString >> Html.text
 
 renderField : Address Action -> Model -> Html
 renderField channel model = 
-    if model.state == Victorious then 
-        Html.text "NOICE"
-    else    
-        Dict.map (renderTile channel model) model.tiles 
-        |> foldl concatMap [] 
-        |> svg [
-                (tileWidth*width)|>toPx|>Attr.width, (tileHeight*height)|>toPx|>Attr.height, Html.Attributes.style [("user-select", "none")]
-            ]
+    case model.state of
+        Victorious -> Html.text "NOICE"
+        _ -> Dict.map (renderTile channel model) model.tiles 
+                |> foldl concatMap [] 
+                |> svg [
+                        (tileWidth*width)|>toPx|>Attr.width, (tileHeight*height)|>toPx|>Attr.height, Html.Attributes.style [("user-select", "none")]
+                    ]
 
 render : Address Action -> Model -> Int -> Html
 render channel model time = Html.div [] [

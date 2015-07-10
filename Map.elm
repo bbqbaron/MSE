@@ -13,24 +13,33 @@ type alias Point = (Int,Int)
 type alias Tile = {contents : Contents, clicked : Bool, marked : Bool}
 type alias Map = Dict Point Tile
 
--- TODO dedupe next two functions
-checkForExplosions : Map -> Bool
-checkForExplosions map = 
-    List.filter (\t->t.contents == Bomb && t.clicked) (Dict.values map) |> List.length |> ((>) 0)
+addCount : Int -> Tile -> Tile
+addCount n tile = 
+    if tile.contents /= Bomb then 
+        {tile|contents<-if n > 0 then Neighbors n else Empty}
+    else
+        tile
 
-checkForVictory : Map -> Bool
-checkForVictory map = 
-    List.filter (\t->t.contents /= Bomb && not t.clicked) (Dict.values map) |> List.length |> ((>) 0)
+addCounts : Map -> Map
+addCounts map = Dict.map (\p t -> addCount (count p map) t) map
 
-mash : Point -> Map -> Map
-mash p map = List.foldl (\dir map'->
-    let dest = move p dir
-    in case Dict.get dest map' of
-        Just tile -> if tile.marked then map' else Dict.update dest setClicked map'
-        _ -> map') map neighbors
+addTile : (Tile, Point) -> Map -> Map
+addTile (tile, point) map = Dict.insert point tile map
 
-tileIs : Contents -> Tile -> Bool
-tileIs what tile = tile.contents == what
+checkFor : (Tile -> Bool) -> Map -> Bool
+checkFor fn map = List.filter fn (Dict.values map) |> List.length |> ((>) 0)
+
+checkBoom : Map -> Bool
+checkBoom = checkFor (\t -> t.contents == Bomb && t.clicked)
+
+checkRemaining : Map -> Bool
+checkRemaining = checkFor (\t->t.contents /= Bomb && not t.clicked)
+
+count : Point -> Map -> Int
+count (x,y) map = 
+    neighborsOf (x,y)
+    -- reduce with addition if bomb
+    |> List.foldl (\(x,y) -> Dict.get (x,y) map |> condM isBomb False |> ((condR 1 0) >> (+))) 0
 
 isBomb : Tile -> Bool
 isBomb = tileIs Bomb
@@ -38,18 +47,8 @@ isBomb = tileIs Bomb
 isEmpty : Tile -> Bool
 isEmpty = tileIs Empty
 
-setClicked : Maybe Tile -> Maybe Tile
-setClicked mTile = case mTile of
-    Just someTile -> Just {someTile|clicked<-True}
-    _ -> Nothing
-
-setMarked : Maybe Tile -> Maybe Tile
-setMarked mTile = case mTile of
-    Just someTile -> Just {someTile|marked<-not someTile.marked}
-    _ -> Nothing
-
-addTile : (Tile, Point) -> Map -> Map
-addTile (tile, point) map = Dict.insert point tile map
+listGenerator : Int -> Int -> Generator (List Float)
+listGenerator width height = list (width*height) probability
 
 makeMap : Int -> Int -> Map
 makeMap width height = (width, height)
@@ -58,16 +57,15 @@ makeMap width height = (width, height)
     |> List.map2 (,) (tiles width height)
     |> List.foldl addTile empty
 
-listGenerator : Int -> Int -> Generator (List Float)
-listGenerator width height = list (width*height) probability
-
-tiles : Int -> Int -> List Tile
-tiles width height = 
-    let (list, _) = generate (listGenerator width height) (initialSeed 0)
-    in List.map makeTile list
-
 makeTile : Float -> Tile
 makeTile roll = {contents = cond (roll <= 0.15) Bomb Empty, clicked = False, marked = False}
+
+mash : Point -> Map -> Map
+mash p map = List.foldl (\dir map'->
+    let dest = move p dir
+    in case Dict.get dest map' of
+        Just tile -> if tile.marked then map' else Dict.update dest setClicked map'
+        _ -> map') map neighbors
 
 move : Point -> Point -> Point
 move (x1,y1) (x2,y2) = (x1+x2,y1+y2)
@@ -85,18 +83,20 @@ neighborsOf (pX,pY) = neighbors |> List.map (\(x,y) -> (pX+x, pY+y))
 neighborMap : Point -> Map -> List (Point, Contents)
 neighborMap p map = neighbors |> List.map (\p->(p, Dict.get p map |> force (.contents)))
 
-count : Point -> Map -> Int
-count (x,y) map = 
-    neighborsOf (x,y)
-    -- reduce with addition if bomb
-    |> List.foldl (\(x,y) -> Dict.get (x,y) map |> condM isBomb False |> ((condR 1 0) >> (+))) 0
+setClicked : Maybe Tile -> Maybe Tile
+setClicked mTile = case mTile of
+    Just someTile -> Just {someTile|clicked<-True}
+    _ -> Nothing
 
-addCount : Int -> Tile -> Tile
-addCount n tile = 
-    if tile.contents /= Bomb then 
-        {tile|contents<-if n > 0 then Neighbors n else Empty}
-    else
-        tile
+setMarked : Maybe Tile -> Maybe Tile
+setMarked mTile = case mTile of
+    Just someTile -> Just {someTile|marked<-not someTile.marked}
+    _ -> Nothing
 
-addCounts : Map -> Map
-addCounts map = Dict.map (\p t -> addCount (count p map) t) map
+tiles : Int -> Int -> List Tile
+tiles width height = 
+    let (list, _) = generate (listGenerator width height) (initialSeed 0)
+    in List.map makeTile list
+
+tileIs : Contents -> Tile -> Bool
+tileIs what tile = tile.contents == what
