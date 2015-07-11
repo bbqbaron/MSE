@@ -1,7 +1,9 @@
 module Map where
 
+import Debug exposing (log)
 import Dict exposing (Dict, empty)
 import List
+import Maybe exposing (withDefault)
 import Random exposing (generate, Generator, initialSeed, list, Seed)
 import Random.Float exposing (probability)
 
@@ -12,6 +14,9 @@ type Contents = Bomb|Neighbors Int|Empty
 type alias Point = (Int,Int)
 type alias Tile = {contents : Contents, clicked : Bool, marked : Bool}
 type alias Map = Dict Point Tile
+
+density : Float
+density = 0.03
 
 addCount : Int -> Tile -> Tile
 addCount n tile = 
@@ -27,13 +32,13 @@ addTile : (Tile, Point) -> Map -> Map
 addTile (tile, point) map = Dict.insert point tile map
 
 checkFor : (Tile -> Bool) -> Map -> Bool
-checkFor fn map = List.filter fn (Dict.values map) |> List.length |> ((>) 0)
+checkFor fn map = List.filter fn (Dict.values map) |> log "filter list" |> List.length |> ((flip (>)) 0)
 
 checkBoom : Map -> Bool
-checkBoom = checkFor (\t -> t.contents == Bomb && t.clicked)
+checkBoom = checkFor (\{contents, clicked} -> contents == Bomb && clicked)
 
 checkRemaining : Map -> Bool
-checkRemaining = checkFor (\t->t.contents /= Bomb && not t.clicked)
+checkRemaining = checkFor (\{contents, clicked} -> contents /= Bomb && not clicked)
 
 countBombs : Point -> Map -> Int
 countBombs (x,y) map = 
@@ -58,13 +63,13 @@ makeMap width height = (width, height)
     |> List.foldl addTile empty
 
 makeTile : Float -> Tile
-makeTile roll = {contents = cond (roll <= 0.15) Bomb Empty, clicked = False, marked = False}
+makeTile roll = {contents = cond (roll <= density) Bomb Empty, clicked = False, marked = False}
 
 mash : Point -> Map -> Map
 mash p map = List.foldl (\dir map'->
     let dest = move p dir
     in case Dict.get dest map' of
-        Just tile -> if tile.marked then map' else Dict.update dest setClicked map'
+        Just tile -> if tile.marked then map' else (peekAndOpen (map', [dest]) True |> fst)
         _ -> map') map neighbors
 
 move : Point -> Point -> Point
@@ -100,3 +105,27 @@ tiles width height =
 
 tileIs : Contents -> Tile -> Bool
 tileIs what tile = tile.contents == what
+
+-- recursive tile opener
+type alias Walker = (Map, List Point) -- a map, a list of points to check
+
+peekAndOpen : Walker -> Bool -> Walker
+peekAndOpen (map, points) force =
+    case List.head points of
+        Just p ->
+            let maybeTile = Dict.get p map
+                -- do we open the tile? do we keep going?
+                (openIt, continue) = case maybeTile of
+                    Just {contents, clicked} -> (
+                            (contents /= Bomb && not clicked)||force,
+                            (contents == Empty && not clicked)||force
+                        )
+                    _ -> (False, False)
+                -- update the map
+                map' = if openIt then Dict.update p setClicked map else map
+                -- update the list of points
+                points' = 
+                    (withDefault [] (List.tail points)) 
+                    ++ (if continue then List.map (move p) neighbors else [])
+            in peekAndOpen (map', points') False
+        _ -> (map, points)

@@ -15,9 +15,8 @@ import Svg exposing (rect, Svg, svg)
 import Svg.Attributes as Attr
 import Svg.Events as Ev
 
-import Map
+import Map exposing(peekAndOpen)
 import Util exposing (..)
-import Walker exposing(peekAndOpen)
 
 type Action = Idle|Click Map.Point|Mark Map.Point
 type GameState = InGame|Dead|Victorious
@@ -44,15 +43,15 @@ update action model =
     let tiles' = case action of
                     Click p -> 
                         let tiles' = Dict.update p Map.setClicked model.tiles
-                        in peekAndOpen (tiles', [p]) |> fst
+                        in peekAndOpen (tiles', [p]) True |> fst
                     Mark p -> 
                         case Dict.get p model.tiles of
                             Just tile -> if tile.clicked then Map.mash p model.tiles else Dict.update p Map.setMarked model.tiles
                     _ -> model.tiles
         model' = {model|tiles<-tiles'}
-    in if | Map.checkBoom model'.tiles -> {model'|state<-Dead}
-          | Map.checkRemaining model'.tiles -> {model'|state<-Victorious}
-          | otherwise -> model'
+        model'' = if Map.checkBoom model'.tiles then {model'|state<-Dead} else model'
+        model''' = if not (Map.checkRemaining model'.tiles) then {model''|state<-Victorious} else model''
+    in model'''
 
 updates : Mailbox Action
 updates = mailbox Idle
