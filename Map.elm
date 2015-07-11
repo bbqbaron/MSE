@@ -19,8 +19,8 @@ density : Float
 density = 0.2
 
 addCount : Int -> Tile -> Tile
-addCount n tile = 
-    if tile.contents /= Bomb then 
+addCount n tile =
+    if tile.contents /= Bomb then
         {tile|contents<-if n > 0 then Neighbors n else Empty}
     else
         tile
@@ -41,13 +41,13 @@ checkRemaining : Map -> Bool
 checkRemaining = checkFor (\{contents, clicked} -> contents /= Bomb && not clicked)
 
 countBombs : Point -> Map -> Int
-countBombs (x,y) map = 
+countBombs (x,y) map =
     neighborsOf (x,y)
     -- reduce with addition if bomb
     |> List.foldl (\(x,y) -> Dict.get (x,y) map |> condM isBomb False |> ((condR 1 0) >> (+))) 0
 
 countRemaining : Map -> Int
-countRemaining map = 
+countRemaining map =
     let tiles = Dict.values map
         marked = List.foldl ((.marked)>>condR 1 0>>(+)) 0 tiles
         bombs = List.foldl ((.contents)>>((==)Bomb)>>condR 1 0>>(+)) 0 tiles
@@ -106,7 +106,7 @@ setMarked mTile = case mTile of
     _ -> Nothing
 
 tiles : Int -> Int -> List Tile
-tiles width height = 
+tiles width height =
     let (list, _) = generate (listGenerator width height) (initialSeed 0)
     in List.map makeTile list
 
@@ -131,8 +131,40 @@ peekAndOpen (map, points) force =
                 -- update the map
                 map' = if openIt then Dict.update p setClicked map else map
                 -- update the list of points
-                points' = 
-                    (withDefault [] (List.tail points)) 
+                points' =
+                    (withDefault [] (List.tail points))
                     ++ (if continue then List.map (move p) neighbors else [])
             in peekAndOpen (map', points') False
         _ -> (map, points)
+
+-- take 2
+
+openNeighborsOfIn : Point -> Map -> Map
+openNeighborsOfIn p map =
+    case Dict.get p map of
+        Just tile ->
+            neighborsOf p
+            |> List.foldl
+                (\p' m' ->
+                    Dict.update p' setClicked m')
+                map
+        _ -> map
+
+shouldOpenNeighbors : Map -> Point -> Tile -> Bool
+shouldOpenNeighbors map p tile =
+    let closedNeighbors =
+            neighborsOf p
+            |> List.filter (
+                \p' -> case Dict.get p' map of
+                    Just tile -> not tile.clicked
+                    _ -> False)
+            |> List.isEmpty
+            |> not
+    in tile.contents == Empty && tile.clicked && closedNeighbors
+
+ensureOpen : Map -> Map
+ensureOpen map =
+    let found = Dict.filter (shouldOpenNeighbors map) map |> Dict.keys |> List.head
+    in case found of
+        Just p -> openNeighborsOfIn p map |> ensureOpen
+        _ -> map
