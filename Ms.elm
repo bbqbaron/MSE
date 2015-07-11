@@ -49,9 +49,9 @@ update action model =
                             Just tile -> if tile.clicked then Map.mash p model.tiles else Dict.update p Map.setMarked model.tiles
                     _ -> model.tiles
         model' = {model|tiles<-tiles'}
-        model'' = if Map.checkBoom model'.tiles then {model'|state<-Dead} else model'
-        model''' = if not (Map.checkRemaining model'.tiles) then {model''|state<-Victorious} else model''
-    in model'''
+    in if | Map.checkBoom model'.tiles -> {model'|state<-Dead}
+          | Map.checkRemaining model'.tiles |> not -> {model'|state<-Victorious}
+          | otherwise -> model'
 
 updates : Mailbox Action
 updates = mailbox Idle
