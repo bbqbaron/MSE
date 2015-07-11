@@ -4,7 +4,7 @@ import Debug exposing (log)
 import Dict exposing (Dict, foldl, insert)
 import Html exposing (Html, text)
 import Html.Attributes
-import Html.Events exposing(on)
+import Html.Events exposing (on, onClick)
 import List
 import Maybe exposing (Maybe(..))
 import Signal exposing ((<~), (~), Address, foldp, Mailbox, mailbox, message, Signal)
@@ -20,12 +20,13 @@ import Svg.Lazy exposing (lazy, lazy2, lazy3)
 import Map
 import Util exposing (..)
 
-type Action = Idle|Click Map.Point|Mark Map.Point
+type Action = Idle|Click Map.Point|Mark Map.Point|NewGame|Tick
 type GameState = InGame|Dead|Victorious
 
 type alias Model = {
         state : GameState,
-        tiles : Map.Map
+        tiles : Map.Map,
+        time : Int
     }
 
 height = 25
@@ -37,31 +38,33 @@ tileHeight = 30
 init : Model
 init = {
         state = InGame,
-        tiles = Map.makeMap width height |> Map.addCounts
+        tiles = Map.makeMap width height |> Map.addCounts,
+        time = 0
     }
 
 update : Action -> Model -> Model
 update action model =
-    let tiles' = case action of
-                    Click p -> 
-                        Dict.update p Map.setClicked model.tiles
-                    Mark p -> 
-                        case Dict.get p model.tiles of
-                            Just tile -> if tile.clicked then Map.mash p model.tiles else Dict.update p Map.toggleMarked model.tiles
-                    _ -> model.tiles
-        model' = {model|tiles<-Map.ensureOpen tiles'}
-    in if | Map.checkBoom model'.tiles -> {model'|state<-Dead}
-          | Map.checkRemaining model'.tiles |> not -> {model'|state<-Victorious}
-          | otherwise -> model'
+    case action of
+        NewGame -> init
+        Tick -> {model|time<-model.time+1}
+        _ ->
+            let tiles' = case action of
+                            Click p -> 
+                                Dict.update p Map.setClicked model.tiles
+                            Mark p -> 
+                                case Dict.get p model.tiles of
+                                    Just tile -> if tile.clicked then Map.mash p model.tiles else Dict.update p Map.toggleMarked model.tiles
+                            _ -> model.tiles
+                model' = {model|tiles<-Map.ensureOpen tiles'}
+            in if | Map.checkBoom model'.tiles -> {model'|state<-Dead}
+                  | Map.checkRemaining model'.tiles |> not -> {model'|state<-Victorious}
+                  | otherwise -> model'
 
 updates : Mailbox Action
 updates = mailbox Idle
 
 state : Signal Model
-state = foldp update init updates.signal
-
-timer : Signal Int
-timer = foldp (\dt ct -> ct + (dt//1000)) 0 (round <~ (Time.fps 1))
+state = foldp update init (Signal.merge updates.signal ((\_->Tick) <~ Time.every 1000))
 
 toPx : a -> String
 toPx = toString >> ((flip (++)) "px")
@@ -99,24 +102,21 @@ renderTile channel model (pX,pY) tile =
                         Map.Empty -> []
             )
 
--- add an ignored arg to the front of a function
-padl : (b -> c -> d) -> (a -> b -> c -> d)
-padl fn = (\_ -> fn)
-
 renderCount : {a|tiles:Map.Map} -> Html
 renderCount = (.tiles) >> Map.countRemaining >> toString >> Html.text
 
 renderTimer : a -> Html
 renderTimer = toString >> Html.text
 
-renderUI : Model -> Int -> Html
-renderUI model time = 
+renderUI : Address Action -> Model -> Html
+renderUI channel model = 
     List.map 
         (Html.p [])
         [
-            [Html.text "Elapsed: ", renderTimer time],
+            [Html.text "Elapsed: ", renderTimer model.time],
             [Html.text "Remaining: ", renderCount model]
         ]
+    |> ((++) [Html.button [Html.Events.onClick channel NewGame] [Html.text "New"]])
     |> Html.div []
 
 renderField : Address Action -> Model -> Html
@@ -129,11 +129,11 @@ renderField channel model =
                         (tileWidth*width)|>toPx|>Attr.width, (tileHeight*height)|>toPx|>Attr.height, Html.Attributes.style [("user-select", "none")]
                     ]
 
-render : Address Action -> Model -> Int -> Html
-render channel model time = Html.div [] [
-        renderUI model time,
+render : Address Action -> Model -> Html
+render channel model = Html.div [] [
+        renderUI channel model,
         renderField channel model
     ]
 
 main : Signal Html
-main = render updates.address <~ state ~ timer
+main = render updates.address <~ state

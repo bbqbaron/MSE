@@ -37,6 +37,10 @@ isNothing a = case a of
 isJust : Maybe a -> Bool
 isJust = isNothing >> not
 
+-- add an ignored arg to the front of a function
+padl : (b -> c -> d) -> (a -> b -> c -> d)
+padl fn = (\_ -> fn)
+
 range : Int -> List Int
 range n = [0..n-1]
 
