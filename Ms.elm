@@ -71,7 +71,7 @@ toPx = toString >> ((flip (++)) "px")
 
 renderTile : Address Action -> Model -> Map.Point -> Map.Tile -> Svg
 renderTile channel model (pX,pY) tile = 
-    let visible = tile.clicked || (model.state == Dead)
+    let visible = tile.clicked || model.state == Dead
         baseColor = cond (not visible) (cond tile.marked "yellow" "black")
         -- curried ifs! as delicious as other curried things
         color = baseColor (cond (Map.isBomb tile) "red" "white")

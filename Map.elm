@@ -67,7 +67,7 @@ listGenerator width height = list (width*height) probability
 makeMap : Int -> Int -> Map
 makeMap width height = (width, height)
     |> tupleMap range
-    |> spread (combine (,))
+    |> uncurry (combine (,))
     |> List.map2 (,) (tiles width height)
     |> List.foldl addTile empty
 
@@ -121,6 +121,7 @@ tiles width height =
 tileIs : Contents -> Tile -> Bool
 tileIs what tile = tile.contents == what
 
+-- TODO dedupe these
 openUnmarkedNeighborsOfIn : Point -> Map -> Map
 openUnmarkedNeighborsOfIn p map =
     case Dict.get p map of

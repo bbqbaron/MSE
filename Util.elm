@@ -44,8 +44,5 @@ padl fn = (\_ -> fn)
 range : Int -> List Int
 range n = [0..n-1]
 
-spread : (a -> b -> c) -> (a,b) -> c
-spread f (a,b) = f a b
-
 tupleMap : (a->b) -> (a,a) -> (b,b)
 tupleMap f (a,a) = (f a, f a)
