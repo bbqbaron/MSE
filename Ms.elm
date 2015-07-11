@@ -15,6 +15,7 @@ import Html.Decoder exposing (mouseEvent)
 import Svg exposing (rect, Svg, svg)
 import Svg.Attributes as Attr
 import Svg.Events as Ev
+import Svg.Lazy exposing (lazy, lazy2, lazy3)
 
 import Map
 import Util exposing (..)
@@ -27,8 +28,8 @@ type alias Model = {
         tiles : Map.Map
     }
 
-height = 50
-width = 50
+height = 25
+width = 25
 
 tileWidth = 30
 tileHeight = 30
@@ -80,7 +81,7 @@ renderTile channel model (pX,pY) tile =
         baseRect = rect (baseAttrs++[
             Attr.fill color
         ]) []
-    in Svg.g 
+    in (lazy2 Svg.g)
             (
                 baseAttrs
                 ++[
@@ -92,9 +93,9 @@ renderTile channel model (pX,pY) tile =
                 [baseRect] 
                 ++ case tile.contents of
                         Map.Bomb -> if visible then [
-                            Svg.text (baseAttrs++[Attr.dy "1.5em", Attr.dx "0.5em"]) [text "B"]] else []
+                            (lazy2 Svg.text) (baseAttrs++[Attr.dy "1.5em", Attr.dx "0.5em"]) [text "B"]] else []
                         Map.Neighbors n -> if visible then [
-                            Svg.text (baseAttrs++[Attr.dy "1.5em", Attr.dx "0.5em"]) [n|>toString|>text]] else []
+                            (lazy2 Svg.text) (baseAttrs++[Attr.dy "1.5em", Attr.dx "0.5em"]) [n|>toString|>text]] else []
                         Map.Empty -> []
             )
 
@@ -124,7 +125,7 @@ renderField channel model =
         Victorious -> Html.text "NOICE"
         _ -> Dict.map (renderTile channel model) model.tiles 
                 |> foldl (padl (::)) []
-                |> svg [
+                |> (lazy2 svg) [
                         (tileWidth*width)|>toPx|>Attr.width, (tileHeight*height)|>toPx|>Attr.height, Html.Attributes.style [("user-select", "none")]
                     ]
 

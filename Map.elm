@@ -7,6 +7,8 @@ import Maybe exposing (withDefault)
 import Random exposing (generate, Generator, initialSeed, list, Seed)
 import Random.Float exposing (probability)
 
+import Lazy.List as LList
+
 import Util exposing (..)
 
 type Contents = Bomb|Neighbors Int|Empty
@@ -162,6 +164,6 @@ shouldOpenNeighbors map p tile =
 ensureOpen : Map -> Map
 ensureOpen map =
     let found = Dict.filter (shouldOpenNeighbors map) map |> Dict.keys |> List.head
-    in case log "found" found of
+    in case found of
         Just p -> openNeighborsOfIn p map |> ensureOpen
         _ -> map
