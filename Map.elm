@@ -46,6 +46,13 @@ countBombs (x,y) map =
     -- reduce with addition if bomb
     |> List.foldl (\(x,y) -> Dict.get (x,y) map |> condM isBomb False |> ((condR 1 0) >> (+))) 0
 
+countRemaining : Map -> Int
+countRemaining map = 
+    let tiles = Dict.values map
+        marked = List.foldl ((.marked)>>condR 1 0>>(+)) 0 tiles
+        bombs = List.foldl ((.contents)>>((==)Bomb)>>condR 1 0>>(+)) 0 tiles
+    in bombs - marked
+
 isBomb : Tile -> Bool
 isBomb = tileIs Bomb
 

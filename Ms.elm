@@ -10,6 +10,7 @@ import Maybe exposing (Maybe(..))
 import Signal exposing ((<~), (~), Address, foldp, Mailbox, mailbox, message, Signal)
 import Time exposing (Time)
 
+import Flex
 import Html.Decoder exposing (mouseEvent)
 import Svg exposing (rect, Svg, svg)
 import Svg.Attributes as Attr
@@ -91,6 +92,9 @@ renderTile channel model (pX,pY) tile =
 concatMap : Map.Point -> Svg -> List Svg -> List Svg
 concatMap _ v l = v :: l
 
+renderCount : Model -> Html
+renderCount model = Map.countRemaining model.tiles |> toString |> Html.text
+
 renderTimer : a -> Html
 renderTimer = toString >> Html.text
 
@@ -105,10 +109,7 @@ renderField channel model =
                     ]
 
 render : Address Action -> Model -> Int -> Html
-render channel model time = Html.div [] [
-        renderTimer time,
-        renderField channel model
-    ]
+render channel model time = Flex.row [renderTimer time, renderField channel model,renderCount model]
 
 main : Signal Html
 main = render updates.address <~ state ~ timer
