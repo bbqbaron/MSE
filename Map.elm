@@ -16,7 +16,7 @@ type alias Tile = {contents : Contents, clicked : Bool, marked : Bool}
 type alias Map = Dict Point Tile
 
 density : Float
-density = 0.03
+density = 0.2
 
 addCount : Int -> Tile -> Tile
 addCount n tile = 
@@ -117,8 +117,8 @@ peekAndOpen (map, points) force =
                 -- do we open the tile? do we keep going?
                 (openIt, continue) = case maybeTile of
                     Just {contents, clicked} -> (
-                            (contents /= Bomb && not clicked)||force,
-                            (contents == Empty && not clicked)||force
+                            contents /= Bomb && (not clicked||force),
+                            contents == Empty && (not clicked||force)
                         )
                     _ -> (False, False)
                 -- update the map
