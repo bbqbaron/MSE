@@ -32,7 +32,7 @@ addTile : (Tile, Point) -> Map -> Map
 addTile (tile, point) map = Dict.insert point tile map
 
 checkFor : (Tile -> Bool) -> Map -> Bool
-checkFor fn map = List.filter fn (Dict.values map) |> log "filter list" |> List.length |> ((flip (>)) 0)
+checkFor fn map = List.filter fn (Dict.values map) |> List.length |> ((flip (>)) 0)
 
 checkBoom : Map -> Bool
 checkBoom = checkFor (\{contents, clicked} -> contents == Bomb && clicked)

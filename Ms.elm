@@ -81,35 +81,59 @@ renderTile channel model (pX,pY) tile =
         baseRect = rect (baseAttrs++[
             Attr.fill color
         ]) []
-    in Svg.g (baseAttrs++[
-                    Ev.onClick (message channel (Click (pX,pY))), Html.Events.on "contextmenu" mouseEvent (\_-> message channel (Mark (pX,pY)))
+    in Svg.g 
+            (
+                baseAttrs
+                ++[
+                    Ev.onClick (message channel (Click (pX,pY))), 
+                    Html.Events.on "contextmenu" mouseEvent (\_-> message channel (Mark (pX,pY)))
                 ]
-            ) ([baseRect] ++ case tile.contents of
-        Map.Bomb -> if visible then [Svg.text (baseAttrs++[Attr.dy "1em"]) [text "B"]] else []
-        Map.Neighbors n -> if visible then [Svg.text (baseAttrs++[Attr.dy "1em"]) [n|>toString|>text]] else []
-        Map.Empty -> [])
+            ) 
+            (
+                [baseRect] 
+                ++ case tile.contents of
+                        Map.Bomb -> if visible then [
+                            Svg.text (baseAttrs++[Attr.dy "1.5em", Attr.dx "0.5em"]) [text "B"]] else []
+                        Map.Neighbors n -> if visible then [
+                            Svg.text (baseAttrs++[Attr.dy "1.5em", Attr.dx "0.5em"]) [n|>toString|>text]] else []
+                        Map.Empty -> []
+            )
 
-concatMap : Map.Point -> Svg -> List Svg -> List Svg
-concatMap _ v l = v :: l
+-- add an ignored arg to the front of a function
+padl : (b -> c -> d) -> (a -> b -> c -> d)
+padl fn = (\_ -> fn)
 
-renderCount : Model -> Html
-renderCount model = Map.countRemaining model.tiles |> toString |> Html.text
+renderCount : {a|tiles:Map.Map} -> Html
+renderCount = (.tiles) >> Map.countRemaining >> toString >> Html.text
 
 renderTimer : a -> Html
 renderTimer = toString >> Html.text
+
+renderUI : Model -> Int -> Html
+renderUI model time = 
+    List.map 
+        (Html.p [])
+        [
+            [Html.text "Elapsed: ", renderTimer time],
+            [Html.text "Remaining: ", renderCount model]
+        ]
+    |> Html.div []
 
 renderField : Address Action -> Model -> Html
 renderField channel model = 
     case model.state of
         Victorious -> Html.text "NOICE"
         _ -> Dict.map (renderTile channel model) model.tiles 
-                |> foldl concatMap [] 
+                |> foldl (padl (::)) []
                 |> svg [
                         (tileWidth*width)|>toPx|>Attr.width, (tileHeight*height)|>toPx|>Attr.height, Html.Attributes.style [("user-select", "none")]
                     ]
 
 render : Address Action -> Model -> Int -> Html
-render channel model time = Flex.row [renderTimer time, renderField channel model,renderCount model]
+render channel model time = Html.div [] [
+        renderUI model time,
+        renderField channel model
+    ]
 
 main : Signal Html
 main = render updates.address <~ state ~ timer

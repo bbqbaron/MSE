@@ -26,6 +26,9 @@ force : (a->b) -> Maybe a -> b
 force fn v = case v of
     Just a -> fn a
 
+into : a -> List a
+into i = i::[]
+
 isNothing : Maybe a -> Bool
 isNothing a = case a of
     Nothing -> True
