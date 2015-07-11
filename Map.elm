@@ -73,11 +73,16 @@ makeTile : Float -> Tile
 makeTile roll = {contents = cond (roll <= density) Bomb Empty, clicked = False, marked = False}
 
 mash : Point -> Map -> Map
-mash p map = List.foldl (\dir map'->
-    let dest = move p dir
-    in case Dict.get dest map' of
-        Just tile -> if tile.marked then map' else (peekAndOpen (map', [dest]) True |> fst)
-        _ -> map') map neighbors
+mash p map =
+    let ts = neighborTiles p map
+        markedNeighbors = ts |> List.filter (.marked) |> List.length
+        bombNeighbors = ts |> List.filter ((.contents)>>((==)Bomb)) |> List.length
+        equal = markedNeighbors == bombNeighbors
+    in 
+        if equal then
+            openUnmarkedNeighborsOfIn p map
+        else
+            map
 
 move : Point -> Point -> Point
 move (x1,y1) (x2,y2) = (x1+x2,y1+y2)
@@ -100,9 +105,10 @@ setClicked mTile = case mTile of
     Just someTile -> Just {someTile|clicked<-True}
     _ -> Nothing
 
-setMarked : Maybe Tile -> Maybe Tile
-setMarked mTile = case mTile of
-    Just someTile -> Just {someTile|marked<-not someTile.marked}
+toggleMarked : Maybe Tile -> Maybe Tile
+toggleMarked mTile = case mTile of
+    Just someTile -> 
+        Just {someTile|marked<-not someTile.marked}
     _ -> Nothing
 
 tiles : Int -> Int -> List Tile
@@ -113,31 +119,22 @@ tiles width height =
 tileIs : Contents -> Tile -> Bool
 tileIs what tile = tile.contents == what
 
--- recursive tile opener
-type alias Walker = (Map, List Point) -- a map, a list of points to check
-
-peekAndOpen : Walker -> Bool -> Walker
-peekAndOpen (map, points) force =
-    case List.head points of
-        Just p ->
-            let maybeTile = Dict.get p map
-                -- do we open the tile? do we keep going?
-                (openIt, continue) = case maybeTile of
-                    Just {contents, clicked} -> (
-                            contents /= Bomb && (not clicked||force),
-                            contents == Empty && (not clicked||force)
-                        )
-                    _ -> (False, False)
-                -- update the map
-                map' = if openIt then Dict.update p setClicked map else map
-                -- update the list of points
-                points' =
-                    (withDefault [] (List.tail points))
-                    ++ (if continue then List.map (move p) neighbors else [])
-            in peekAndOpen (map', points') False
-        _ -> (map, points)
-
--- take 2
+openUnmarkedNeighborsOfIn : Point -> Map -> Map
+openUnmarkedNeighborsOfIn p map =
+    case Dict.get p map of
+        Just tile ->
+            neighborsOf p
+            |> List.foldl
+                (\p' m' ->
+                    case Dict.get p' m' of
+                        Just tile -> 
+                            if not tile.marked then
+                                Dict.update p' setClicked m'
+                            else
+                                m'
+                        _ -> m')
+                map
+        _ -> map
 
 openNeighborsOfIn : Point -> Map -> Map
 openNeighborsOfIn p map =
@@ -165,6 +162,6 @@ shouldOpenNeighbors map p tile =
 ensureOpen : Map -> Map
 ensureOpen map =
     let found = Dict.filter (shouldOpenNeighbors map) map |> Dict.keys |> List.head
-    in case found of
+    in case log "found" found of
         Just p -> openNeighborsOfIn p map |> ensureOpen
         _ -> map

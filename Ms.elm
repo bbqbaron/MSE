@@ -16,7 +16,7 @@ import Svg exposing (rect, Svg, svg)
 import Svg.Attributes as Attr
 import Svg.Events as Ev
 
-import Map exposing(peekAndOpen)
+import Map
 import Util exposing (..)
 
 type Action = Idle|Click Map.Point|Mark Map.Point
@@ -27,8 +27,8 @@ type alias Model = {
         tiles : Map.Map
     }
 
-height = 15
-width = 15
+height = 50
+width = 50
 
 tileWidth = 30
 tileHeight = 30
@@ -43,13 +43,12 @@ update : Action -> Model -> Model
 update action model =
     let tiles' = case action of
                     Click p -> 
-                        let tiles' = Dict.update p Map.setClicked model.tiles
-                        in peekAndOpen (tiles', [p]) True |> fst
+                        Dict.update p Map.setClicked model.tiles
                     Mark p -> 
                         case Dict.get p model.tiles of
-                            Just tile -> if tile.clicked then Map.mash p model.tiles else Dict.update p Map.setMarked model.tiles
+                            Just tile -> if tile.clicked then Map.mash p model.tiles else Dict.update p Map.toggleMarked model.tiles
                     _ -> model.tiles
-        model' = {model|tiles<-tiles'}
+        model' = {model|tiles<-Map.ensureOpen tiles'}
     in if | Map.checkBoom model'.tiles -> {model'|state<-Dead}
           | Map.checkRemaining model'.tiles |> not -> {model'|state<-Victorious}
           | otherwise -> model'
