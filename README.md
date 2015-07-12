@@ -6,11 +6,11 @@
 
 ## Why Elm?
 * Strongly Typed
-** Haskell-esque
-** No nulls
-** Types can have parameters
+    * Haskell-esque
+    * No nulls
+    * Types can have parameters
 * Pure
-** Testing is easier
+    * Testing is easier
 * Built-in FRP
 * More immediately accessible than Haskell
 
