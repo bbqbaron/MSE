@@ -1,139 +1,65 @@
 module Ms where
 
-import Debug exposing (log)
-import Dict exposing (Dict, foldl, insert)
-import Html exposing (Html, text)
-import Html.Attributes
-import Html.Events exposing (on, onClick)
-import List
+import Html exposing (Html)
 import Maybe exposing (Maybe(..))
-import Signal exposing ((<~), (~), Address, foldp, Mailbox, mailbox, message, Signal)
+import Signal exposing ((<~), (~), Address, foldp, forwardTo, Mailbox, mailbox, message, Signal)
 import Time exposing (Time)
 
-import Flex
-import Html.Decoder exposing (mouseEvent)
-import Svg exposing (rect, Svg, svg)
-import Svg.Attributes as Attr
-import Svg.Events as Ev
-import Svg.Lazy exposing (lazy, lazy2, lazy3)
-
-import Map
+import Game
+import NewGame
 import Util exposing (..)
 
-type Action = Idle|Click Map.Point|Mark Map.Point|NewGame|Tick
-type GameState = InGame|Dead|Victorious
+type Mode = New|Playing
 
 type alias Model = {
-        state : GameState,
-        tiles : Map.Map,
-        time : Int
+        game : Maybe Game.Model,
+        newGame : NewGame.Model,
+        mode : Mode
     }
 
-height = 25
-width = 25
-
-tileWidth = 30
-tileHeight = 30
+type Action = Idle|Switch Mode|GameAction Game.Action|NewGameAction NewGame.Action
 
 init : Model
 init = {
-        state = InGame,
-        tiles = Map.makeMap width height |> Map.addCounts,
-        time = 0
+        newGame = NewGame.init,
+        game = Nothing,
+        mode = New
     }
 
 update : Action -> Model -> Model
-update action model =
-    case action of
-        NewGame -> init
-        Tick -> {model|time<-model.time+1}
-        _ ->
-            let tiles' = case action of
-                            Click p -> 
-                                Dict.update p Map.setClicked model.tiles
-                            Mark p -> 
-                                case Dict.get p model.tiles of
-                                    Just tile -> if tile.clicked then Map.mash p model.tiles else Dict.update p Map.toggleMarked model.tiles
-                            _ -> model.tiles
-                model' = {model|tiles<-Map.ensureOpen tiles'}
-            in if | Map.checkBoom model'.tiles -> {model'|state<-Dead}
-                  | Map.checkRemaining model'.tiles |> not -> {model'|state<-Victorious}
-                  | otherwise -> model'
+update action model = case action of
+    Switch mode -> {model|mode<-mode}
+    NewGameAction action -> 
+        let (newGame', request) = NewGame.update action model.newGame
+            model' = {model|newGame<-newGame'}
+        in case request of
+            NewGame.CreateGame gameRequest -> {
+                model|
+                    game<-Just Game.init gameRequest
+                    mode<-Playing}
+            _ -> model'
+    GameAction action -> {model|game<-Game.update action model.game}
+    _ -> model
+
+render : Signal.Address Action -> Model -> Html
+render channel model = case model.mode of
+    New -> NewGame.render (forwardTo channel NewGameAction) model.newGame
+    Playing -> Game.render (forwardTo channel GameAction) model.game
+    -- BOOM
+    _ -> Html.text "Uh...this is embarrassing."
+
+-- top-level stuff
 
 updates : Mailbox Action
 updates = mailbox Idle
 
 state : Signal Model
-state = foldp update init (Signal.merge updates.signal ((\_->Tick) <~ Time.every 1000))
-
-toPx : a -> String
-toPx = toString >> ((flip (++)) "px")
-
-renderTile : Address Action -> Model -> Map.Point -> Map.Tile -> Svg
-renderTile channel model (pX,pY) tile = 
-    let visible = tile.clicked || model.state == Dead
-        baseColor = cond (not visible) (cond tile.marked "yellow" "black")
-        -- curried ifs! as delicious as other curried things
-        color = baseColor (cond (Map.isBomb tile) "red" "white")
-        baseAttrs = [
-                (pX*tileWidth)|>toPx|>Attr.x, 
-                (pY*tileHeight)|>toPx|>Attr.y, 
-                tileWidth|>toPx|>Attr.width, 
-                tileHeight|>toPx|>Attr.height
-            ]
-        baseRect = rect (baseAttrs++[
-            Attr.fill color
-        ]) []
-    in (lazy2 Svg.g)
-            (
-                baseAttrs
-                ++[
-                    Ev.onClick (message channel (Click (pX,pY))), 
-                    Html.Events.on "contextmenu" mouseEvent (\_-> message channel (Mark (pX,pY)))
-                ]
-            ) 
-            (
-                [baseRect] 
-                ++ case tile.contents of
-                        Map.Bomb -> if visible then [
-                            (lazy2 Svg.text) (baseAttrs++[Attr.dy "1.5em", Attr.dx "0.5em"]) [text "B"]] else []
-                        Map.Neighbors n -> if visible then [
-                            (lazy2 Svg.text) (baseAttrs++[Attr.dy "1.5em", Attr.dx "0.5em"]) [n|>toString|>text]] else []
-                        Map.Empty -> []
-            )
-
-renderCount : {a|tiles:Map.Map} -> Html
-renderCount = (.tiles) >> Map.countRemaining >> toString >> Html.text
-
-renderTimer : a -> Html
-renderTimer = toString >> Html.text
-
-renderUI : Address Action -> Model -> Html
-renderUI channel model = 
-    List.map 
-        (Html.p [])
-        [
-            [Html.text "Elapsed: ", renderTimer model.time],
-            [Html.text "Remaining: ", renderCount model]
-        ]
-    |> ((++) [Html.button [Html.Events.onClick channel NewGame] [Html.text "New"]])
-    |> Html.div []
-
-renderField : Address Action -> Model -> Html
-renderField channel model = 
-    case model.state of
-        Victorious -> Html.text "NOICE"
-        _ -> Dict.map (renderTile channel model) model.tiles 
-                |> foldl (padl (::)) []
-                |> (lazy2 svg) [
-                        (tileWidth*width)|>toPx|>Attr.width, (tileHeight*height)|>toPx|>Attr.height, Html.Attributes.style [("user-select", "none")]
-                    ]
-
-render : Address Action -> Model -> Html
-render channel model = Html.div [] [
-        renderUI channel model,
-        renderField channel model
-    ]
+-- worth noting here
+-- the fact that signals all enter data from the top does mean that nested components
+-- can exercise some control over their parents,
+-- a la this addition of a time signal.
+-- perhaps i'm doing it wrong?
+state = foldp update init (Signal.merge updates.signal ((\_->GameAction Game.Tick) <~ Time.every 1000))
 
 main : Signal Html
 main = render updates.address <~ state

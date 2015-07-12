@@ -17,9 +17,6 @@ type alias Point = (Int,Int)
 type alias Tile = {contents : Contents, clicked : Bool, marked : Bool}
 type alias Map = Dict Point Tile
 
-density : Float
-density = 0.2
-
 addCount : Int -> Tile -> Tile
 addCount n tile =
     if tile.contents /= Bomb then
@@ -30,8 +27,8 @@ addCount n tile =
 addCounts : Map -> Map
 addCounts map = Dict.map (\p t -> addCount (countBombs p map) t) map
 
-addTile : (Tile, Point) -> Map -> Map
-addTile (tile, point) map = Dict.insert point tile map
+addTile : Float -> (Tile, Point) -> Map -> Map
+addTile density (tile, point) map = Dict.insert point tile map
 
 checkFor : (Tile -> Bool) -> Map -> Bool
 checkFor fn map = List.filter fn (Dict.values map) |> List.length |> ((flip (>)) 0)
@@ -64,15 +61,15 @@ isEmpty = tileIs Empty
 listGenerator : Int -> Int -> Generator (List Float)
 listGenerator width height = list (width*height) probability
 
-makeMap : Int -> Int -> Map
-makeMap width height = (width, height)
+makeMap : Float -> Int -> Int -> Map
+makeMap density width height = (width, height)
     |> tupleMap range
     |> uncurry (combine (,))
-    |> List.map2 (,) (tiles width height)
-    |> List.foldl addTile empty
+    |> List.map2 (,) (tiles density width height)
+    |> List.foldl (addTile density) empty
 
-makeTile : Float -> Tile
-makeTile roll = {contents = cond (roll <= density) Bomb Empty, clicked = False, marked = False}
+makeTile : Float -> Float -> Tile
+makeTile density roll = {contents = cond (roll <= density) Bomb Empty, clicked = False, marked = False}
 
 mash : Point -> Map -> Map
 mash p map =
@@ -113,10 +110,10 @@ toggleMarked mTile = case mTile of
         Just {someTile|marked<-not someTile.marked}
     _ -> Nothing
 
-tiles : Int -> Int -> List Tile
-tiles width height =
+tiles : Float -> Int -> Int -> List Tile
+tiles density width height =
     let (list, _) = generate (listGenerator width height) (initialSeed 0)
-    in List.map makeTile list
+    in List.map (makeTile density) list
 
 tileIs : Contents -> Tile -> Bool
 tileIs what tile = tile.contents == what
