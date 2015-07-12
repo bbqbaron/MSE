@@ -32,11 +32,11 @@ update action model = case action of
     Switch mode -> {model|mode<-mode}
     NewGameAction action -> 
         let (newGame', request) = NewGame.update action model.newGame
-            model' = {model|newGame<-log "updated newgame" newGame'}
+            model' = {model|newGame<-newGame'}
         in case request of
             NewGame.CreateGame gameRequest -> {
                 model'|
-                    game<-Game.init (log "req" gameRequest),
+                    game<-Game.init gameRequest,
                     mode<-Type.Playing}
             _ -> model'
     GameAction action ->

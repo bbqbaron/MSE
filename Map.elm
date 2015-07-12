@@ -147,21 +147,24 @@ openNeighborsOfIn p map =
                 map
         _ -> map
 
-shouldOpenNeighbors : Map -> Point -> Tile -> Bool
-shouldOpenNeighbors map p tile =
-    if | tile.contents /= Empty -> False
-       | not tile.clicked -> False
+isFine : Map -> (Point, Tile) -> Bool
+isFine map (p, tile) =
+    if | tile.contents /= Empty -> True
+       | not tile.clicked -> True
        | otherwise -> neighborsOf p
             |> List.filter (
                 \p' -> case Dict.get p' map of
                     Just tile -> not tile.clicked
                     _ -> False)
             |> List.isEmpty
-            |> not
 
 ensureOpen : Map -> Map
 ensureOpen map =
-    let found = Dict.filter (shouldOpenNeighbors map) map |> Dict.keys |> List.head
-    in case found of
+    -- TODO having checked all neighbor tiles, can simply return that result instead of naively re-iterating over
+    -- all directions from the tile again
+    -- TODO this is entering an infinite loop somehow
+    -- TODO this could be given a starting point and save significant time
+    let openEmptyTile = map |> Dict.toList |> LList.fromList |> LList.dropWhile (isFine map) |> LList.head
+    in case openEmptyTile of
         Nothing -> map
-        Just p -> openNeighborsOfIn p map |> ensureOpen
+        Just (p,_) -> openNeighborsOfIn p map |> ensureOpen

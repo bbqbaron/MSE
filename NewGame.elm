@@ -29,13 +29,13 @@ init = {
 update : Action -> Model -> (Model, Request)
 update action model =
     let model' = 
-            case log "action" action of
+            case action of
                 NumberOfMines n -> {model|numberOfMines<-n}
                 Width w -> {model|width<-w}
                 Height h -> {model|height<-h}
                 _ -> model
     in (
-        log "newmodel" model',
+        model',
         case action of
             Submit -> CreateGame model'
             _ -> None
