@@ -38,27 +38,30 @@ tileHeight = 30
 init : GameRequest -> Model
 init {numberOfMines, width, height} = {
         state = InGame,
-        tiles = Map.makeMap (numberOfMines/(width*height)) width height |> Map.addCounts,
+        tiles = Map.makeMap ((toFloat numberOfMines)/((toFloat width)*(toFloat height))) width height |> Map.addCounts,
         time = 0
     }
 
-update : Action -> Model -> Model
+update : Action -> Model -> (Model, Maybe Type.Mode)
 update action model =
     case action of
-        NewGame -> init
-        Tick -> {model|time<-model.time+1}
+        NewGame -> (model, Just Type.New)
+        Tick -> ({model|time<-model.time+1}, Nothing)
         _ ->
-            let tiles' = case action of
-                            Click p -> 
-                                Dict.update p Map.setClicked model.tiles
-                            Mark p -> 
-                                case Dict.get p model.tiles of
-                                    Just tile -> if tile.clicked then Map.mash p model.tiles else Dict.update p Map.toggleMarked model.tiles
-                            _ -> model.tiles
-                model' = {model|tiles<-Map.ensureOpen tiles'}
-            in if | Map.checkBoom model'.tiles -> {model'|state<-Dead}
-                  | Map.checkRemaining model'.tiles |> not -> {model'|state<-Victorious}
-                  | otherwise -> model'
+            (
+                let tiles' = case action of
+                                Click p -> 
+                                    Dict.update p Map.setClicked model.tiles
+                                Mark p -> 
+                                    case Dict.get p model.tiles of
+                                        Just tile -> if tile.clicked then Map.mash p model.tiles else Dict.update p Map.toggleMarked model.tiles
+                                _ -> model.tiles
+                    model' = {model|tiles<-Map.ensureOpen tiles'}
+                in if | Map.checkBoom model'.tiles -> {model'|state<-Dead}
+                      | Map.checkRemaining model'.tiles |> not -> {model'|state<-Victorious}
+                      | otherwise -> model'
+            ,
+            Nothing)
 
 toPx : a -> String
 toPx = toString >> ((flip (++)) "px")

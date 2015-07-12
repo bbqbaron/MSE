@@ -5,3 +5,5 @@ type alias GameRequest = {
         width : Int,
         height : Int
     }
+
+type Mode = New|Playing

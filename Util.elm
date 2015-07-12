@@ -43,3 +43,6 @@ range n = [0..n-1]
 
 tupleMap : (a->b) -> (a,a) -> (b,b)
 tupleMap f (a,a) = (f a, f a)
+
+uncurry2 : (a -> b -> c -> d) -> (a,b,c) -> d
+uncurry2 fn (a,b,c) = fn a b c
