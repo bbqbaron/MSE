@@ -149,19 +149,19 @@ openNeighborsOfIn p map =
 
 shouldOpenNeighbors : Map -> Point -> Tile -> Bool
 shouldOpenNeighbors map p tile =
-    let closedNeighbors =
-            neighborsOf p
+    if | tile.contents /= Empty -> False
+       | not tile.clicked -> False
+       | otherwise -> neighborsOf p
             |> List.filter (
                 \p' -> case Dict.get p' map of
                     Just tile -> not tile.clicked
                     _ -> False)
             |> List.isEmpty
             |> not
-    in tile.contents == Empty && tile.clicked && closedNeighbors
 
 ensureOpen : Map -> Map
 ensureOpen map =
     let found = Dict.filter (shouldOpenNeighbors map) map |> Dict.keys |> List.head
     in case found of
+        Nothing -> map
         Just p -> openNeighborsOfIn p map |> ensureOpen
-        _ -> map
