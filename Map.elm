@@ -118,7 +118,6 @@ tiles density width height =
 tileIs : Contents -> Tile -> Bool
 tileIs what tile = tile.contents == what
 
--- TODO dedupe these
 openUnmarkedNeighborsOfIn : Point -> Map -> Map
 openUnmarkedNeighborsOfIn p map =
     case Dict.get p map of
