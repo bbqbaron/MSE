@@ -136,35 +136,30 @@ openUnmarkedNeighborsOfIn p map =
                 map
         _ -> map
 
-openNeighborsOfIn : Point -> Map -> Map
-openNeighborsOfIn p map =
-    case Dict.get p map of
-        Just tile ->
-            neighborsOf p
-            |> List.foldl
-                (\p' m' ->
-                    Dict.update p' setClicked m')
-                map
-        _ -> map
+openPointsIn : Map -> List Point -> Map
+openPointsIn map points = List.foldl (\p' m' -> Dict.update p' setClicked m') map points
 
-isFine : Map -> (Point, Tile) -> Bool
-isFine map (p, tile) =
-    if | tile.contents /= Empty -> True
-       | not tile.clicked -> True
+getPointsToOpen : Map -> (Point, Tile) -> List Point
+getPointsToOpen map (p, tile) =
+    if | tile.contents /= Empty -> []
+       | not tile.clicked -> []
        | otherwise -> neighborsOf p
             |> List.filter (
                 \p' -> case Dict.get p' map of
                     Just tile -> not tile.clicked
                     _ -> False)
-            |> List.isEmpty
 
 ensureOpen : Map -> Map
 ensureOpen map =
     -- TODO having checked all neighbor tiles, can simply return that result instead of naively re-iterating over
     -- all directions from the tile again
-    -- TODO this is entering an infinite loop somehow
     -- TODO this could be given a starting point and save significant time
-    let openEmptyTile = map |> Dict.toList |> LList.fromList |> LList.dropWhile (isFine map) |> LList.head
+    let openEmptyTile = map 
+        |> Dict.toList 
+        |> LList.fromList 
+        |> LList.map (getPointsToOpen map) 
+        |> LList.dropWhile List.isEmpty 
+        |> LList.head
     in case openEmptyTile of
         Nothing -> map
-        Just (p,_) -> openNeighborsOfIn p map |> ensureOpen
+        Just points -> openPointsIn map points |> ensureOpen
