@@ -148,6 +148,10 @@ getPointsToOpen map (p, tile) =
                     Just tile -> not tile.clicked
                     _ -> False)
 
+-- note that this is point-agnostic,
+-- because it's designed to validate _any_ map state after user action.
+-- this certainly comes at a performance cost, especially in low-density maps
+-- with lots of empty space.
 ensureOpen : Map -> Map
 ensureOpen map =
     let openEmptyTile = map 
