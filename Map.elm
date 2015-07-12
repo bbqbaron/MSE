@@ -150,7 +150,6 @@ getPointsToOpen map (p, tile) =
 
 ensureOpen : Map -> Map
 ensureOpen map =
-    -- TODO this could be given a starting point and save significant time
     let openEmptyTile = map 
         |> Dict.toList 
         |> LList.fromList 
