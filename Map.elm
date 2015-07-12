@@ -151,8 +151,6 @@ getPointsToOpen map (p, tile) =
 
 ensureOpen : Map -> Map
 ensureOpen map =
-    -- TODO having checked all neighbor tiles, can simply return that result instead of naively re-iterating over
-    -- all directions from the tile again
     -- TODO this could be given a starting point and save significant time
     let openEmptyTile = map 
         |> Dict.toList 
