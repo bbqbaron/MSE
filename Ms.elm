@@ -12,17 +12,28 @@ import Type exposing (Mode)
 import Util exposing (..)
 
 type alias Model = {
+        -- state of the game
         game : Game.Model,
+        -- state of the newgame menu
         newGame : NewGame.Model,
+        -- where are we?
         mode : Mode
+        -- i could probably use polymorphism to avoid tracking both at once,
+        -- but this is a simple example
     }
 
-type Action = Idle|Switch Mode|GameAction Game.Action|NewGameAction NewGame.Action
+type Action = Idle
+    -- in-game or new-game?
+    |Switch Mode
+    -- anything in-game
+    |GameAction Game.Action
+    -- anything new-game
+    |NewGameAction NewGame.Action
 
 init : Model
 init = {
         newGame = NewGame.init,
-        -- placeholder to avoid maybe unwrapping : p
+        -- placeholder to avoid unwrapping Maybes just because the game might not exist yet : p
         game = Game.init {numberOfMines=0, width=0, height=0},
         mode = Type.New
     }
@@ -54,7 +65,8 @@ render channel model = case model.mode of
     -- BOOM
     _ -> Html.text "Uh...this is embarrassing."
 
--- top-level stuff
+-- top-level app organization.
+-- updates, state, and main will typically only appear at the top level of an app.
 
 updates : Mailbox Action
 updates = mailbox Idle

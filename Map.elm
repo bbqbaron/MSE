@@ -135,6 +135,10 @@ openUnmarkedNeighborsOfIn p map =
                 map
         _ -> map
 
+-- board opener
+-- naively recursive and therefore crazy slow,
+-- apologies.
+
 openPointsIn : Map -> List Point -> Map
 openPointsIn map points = List.foldl (\p' m' -> Dict.update p' setClicked m') map points
 
